@@ -1,0 +1,6 @@
+﻿# Secrets and Credentials
+config/credentials*.json
+data/*.pickle
+.env
+__pycache__/
+*.pth
