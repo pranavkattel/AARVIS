@@ -1,0 +1,256 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Join - Smart Mirror</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; }
+        body {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            display: flex; align-items: center; justify-content: center;
+        }
+        .card {
+            background: #fff; border-radius: 20px;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.25);
+            padding: 40px 36px 32px; width: 100%; max-width: 420px;
+            text-align: center;
+        }
+        .logo { font-size: 52px; margin-bottom: 10px; }
+        h1 { font-size: 24px; color: #1a1a2e; margin-bottom: 6px; }
+        .subtitle { color: #888; font-size: 14px; margin-bottom: 28px; }
+        .btn-google {
+            display: flex; align-items: center; justify-content: center; gap: 12px;
+            width: 100%; padding: 14px; background: #fff;
+            color: #3c4043; border: 1.5px solid #dadce0; border-radius: 10px;
+            font-size: 16px; font-weight: 600; text-decoration: none;
+            transition: box-shadow .2s, border-color .2s;
+        }
+        .btn-google:hover { box-shadow: 0 3px 14px rgba(0,0,0,0.18); border-color: #bbb; }
+        .perks { margin: 22px 0; text-align: left; display: flex; flex-direction: column; gap: 10px; }
+        .perk { display: flex; align-items: center; gap: 12px; font-size: 14px; color: #444; }
+        .perk-icon { font-size: 20px; flex-shrink: 0; }
+        .divider { display: flex; align-items: center; gap: 10px; color: #ccc; font-size: 13px; margin: 18px 0 10px; }
+        .divider::before, .divider::after { content:''; flex:1; height:1px; background:#eee; }
+        .toggle-btn { background:none; border:none; color:#667eea; font-size:13px; cursor:pointer; text-decoration:underline; }
+        #emailForm { display:none; margin-top:18px; text-align:left; }
+        .form-group { margin-bottom: 14px; }
+        label { font-size: 13px; color: #555; display: block; margin-bottom: 5px; font-weight: 500; }
+        input[type=text], input[type=email], input[type=password] {
+            width: 100%; padding: 10px 13px; border: 1.5px solid #ddd; border-radius: 8px;
+            font-size: 14px; transition: border-color .2s;
+        }
+        input:focus { outline: none; border-color: #667eea; }
+        .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .btn-submit {
+            width: 100%; padding: 12px; margin-top: 4px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: #fff; border: none; border-radius: 8px;
+            font-size: 15px; font-weight: 600; cursor: pointer;
+        }
+        .btn-submit:hover { opacity: .9; }
+        .err { color: #f44336; font-size: 13px; margin-top: 8px; display: none; }
+        .oauth-err { background: rgba(244,67,54,.1); color: #d32f2f; padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; display:none; }
+        .footer-link { margin-top: 20px; font-size: 13px; color: #aaa; }
+        .footer-link a { color: #667eea; text-decoration: none; font-weight: 500; }
+        .note { font-size: 12px; color: #aaa; margin-top: 8px; }
+        .qr-section { margin-top: 22px; padding-top: 18px; border-top: 1px solid #f0f0f0; text-align: center; }
+        .qr-label { font-size: 12px; color: #aaa; margin-bottom: 10px; }
+        .qr-url { font-size: 10px; color: #ccc; margin-top: 8px; word-break: break-all; }
+        #qrcode { display: inline-block; border-radius: 8px; overflow: hidden; }
+    </style>
+</head>
+<body>
+    <div style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;">
+        <div class="card">
+            <div class="logo">&#129710;</div>
+            <h1>Join Smart Mirror</h1>
+            <p class="subtitle">One click &mdash; your Gmail &amp; Calendar connect automatically</p>
+
+            <div id="oauthErr" class="oauth-err"></div>
+
+            <a href="/auth/google?intent=register" class="btn-google" id="googleBtn">
+                <svg width="22" height="22" viewBox="0 0 48 48">
+                    <path fill="#4285F4" d="M44.5 20H24v8.5h11.7C34.2 33.3 29.6 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l6-6C34.5 6.5 29.6 4.5 24 4.5 12.7 4.5 3.5 13.7 3.5 25S12.7 45.5 24 45.5c11 0 20.5-8 20.5-20.5 0-1.4-.1-2.7-.5-5z"/>
+                    <path fill="#34A853" d="M6.3 14.7l7 5.1C15.1 17 19.3 14 24 14c3.1 0 5.9 1.2 8 3.1l6-6C34.5 6.5 29.6 4.5 24 4.5c-7.6 0-14.2 4.3-17.7 10.2z"/>
+                    <path fill="#FBBC05" d="M24 45.5c5.5 0 10.4-1.9 14.2-5.1l-6.6-5.4C29.6 36.8 27 37.5 24 37.5c-5.5 0-10.2-3.6-11.8-8.6l-7 5.4C8.3 41.4 15.5 45.5 24 45.5z"/>
+                    <path fill="#EA4335" d="M44.5 20H24v8.5h11.7c-.8 2.3-2.3 4.2-4.3 5.5l6.6 5.4c3.9-3.6 6-8.9 6-15.4 0-1.4-.1-2.7-.5-5z"/>
+                </svg>
+                Continue with Google
+            </a>
+
+            <div class="perks">
+                <div class="perk"><span class="perk-icon">&#128197;</span> Live Google Calendar &mdash; voice scheduling</div>
+                <div class="perk"><span class="perk-icon">&#9993;&#65039;</span> Gmail &mdash; read &amp; send by voice</div>
+                <div class="perk"><span class="perk-icon">&#129302;</span> AARVIS AI personalised to your account</div>
+                <div class="perk"><span class="perk-icon">&#128274;</span> No passwords &mdash; tokens stored locally only</div>
+            </div>
+
+            <div class="divider">or</div>
+            <button class="toggle-btn" onclick="toggleEmail(this)">Register with email &amp; password instead</button>
+
+            <div id="emailForm">
+                <div class="row">
+                    <div class="form-group">
+                        <label>Full Name *</label>
+                        <input type="text" id="fullName" placeholder="Your Name">
+                    </div>
+                    <div class="form-group">
+                        <label>Username *</label>
+                        <input type="text" id="username" placeholder="username">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Email *</label>
+                    <input type="email" id="email" placeholder="you@example.com">
+                </div>
+                <div class="row">
+                    <div class="form-group">
+                        <label>Password *</label>
+                        <input type="password" id="pw" placeholder="Min 6 chars">
+                    </div>
+                    <div class="form-group">
+                        <label>Confirm *</label>
+                        <input type="password" id="pw2" placeholder="Re-enter">
+                    </div>
+                </div>
+                <div class="err" id="emailErr"></div>
+                <button class="btn-submit" onclick="handleEmailRegister(event)">Create Account</button>
+                <p class="note">&#9888;&#65039; Email accounts won't have Gmail / Calendar access.</p>
+            </div>
+
+            <p class="footer-link">Already have an account? <a href="/login">Sign in</a></p>
+
+            <!-- QR code for phone access -->
+            <div class="qr-section">
+                <div class="qr-label">&#128242; Scan to register from your phone (same Wi-Fi)</div>
+                <div id="qrcode"></div>
+                <div class="qr-url" id="qrUrl"></div>
+                <div id="pairStatus" style="display:none; margin-top:8px; color:#667eea; font-size:12px; font-weight:600;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <script>
+        (function () {
+            const p = new URLSearchParams(window.location.search);
+            const e = p.get('error');
+            if (e) {
+                const msgs = {
+                    access_denied:         'Google sign-in was cancelled.',
+                    token_exchange_failed: 'Could not get tokens from Google. Please try again.',
+                    db_error:              'Account creation failed. Please try again.',
+                    no_code:               'Unexpected error. Please try again.',
+                };
+                const el = document.getElementById('oauthErr');
+                el.textContent = msgs[e] || 'Google error: ' + e;
+                el.style.display = 'block';
+            }
+        })();
+
+        function toggleEmail(btn) {
+            const f = document.getElementById('emailForm');
+            const show = f.style.display === 'none';
+            f.style.display = show ? 'block' : 'none';
+            btn.textContent = show ? 'Hide email form' : 'Register with email & password instead';
+        }
+
+        async function handleEmailRegister(event) {
+            event.preventDefault();
+            const err = document.getElementById('emailErr');
+            const pw  = document.getElementById('pw').value;
+            const pw2 = document.getElementById('pw2').value;
+            if (!document.getElementById('fullName').value || !document.getElementById('username').value ||
+                !document.getElementById('email').value || !pw) {
+                err.textContent = 'Please fill in all required fields.'; err.style.display = 'block'; return;
+            }
+            if (pw !== pw2) { err.textContent = 'Passwords do not match.'; err.style.display = 'block'; return; }
+            if (pw.length < 6) { err.textContent = 'Password must be at least 6 characters.'; err.style.display = 'block'; return; }
+            err.style.display = 'none';
+            try {
+                const res = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        username:  document.getElementById('username').value,
+                        email:     document.getElementById('email').value,
+                        password:  pw,
+                        full_name: document.getElementById('fullName').value,
+                        location: '', interests: ''
+                    })
+                });
+                const data = await res.json();
+                if (res.ok) { window.location.href = '/'; }
+                else { err.textContent = data.detail || 'Registration failed.'; err.style.display = 'block'; }
+            } catch (e) { err.textContent = 'Connection error.'; err.style.display = 'block'; }
+        }
+
+        const PAIR_TOKEN = '{{ pair_token }}';
+        const QR_URL = '{{ qr_url or "" }}';
+        let pairPollInterval = null;
+
+        async function initQR() {
+            try {
+                let finalUrl = QR_URL;
+                if (!finalUrl) {
+                    const res = await fetch(`/api/local-url?path=/mobile-connect%3Fpair%3D${PAIR_TOKEN}`);
+                    const data = await res.json();
+                    finalUrl = data.url;
+                }
+                // Use the same broker/QR flow for PC button too, so both paths are identical.
+                const googleBtn = document.getElementById('googleBtn');
+                if (googleBtn) {
+                    googleBtn.href = finalUrl;
+                }
+                document.getElementById('qrUrl').textContent = finalUrl;
+                new QRCode(document.getElementById('qrcode'), {
+                    text: finalUrl, width: 128, height: 128,
+                    colorDark: '#1a1a2e', colorLight: '#ffffff',
+                    correctLevel: QRCode.CorrectLevel.M
+                });
+            } catch(e) {
+                document.querySelector('.qr-section').style.display = 'none';
+            }
+        }
+
+        async function pollPair() {
+            try {
+                const res = await fetch(`/api/pair-status/${PAIR_TOKEN}`);
+                const data = await res.json();
+                if (data.status === 'triggered') {
+                    clearInterval(pairPollInterval);
+                    const ps = document.getElementById('pairStatus');
+                    ps.textContent = '\u2713 Phone requested PC fallback. Opening Google sign-in here...';
+                    ps.style.display = 'block';
+                    setTimeout(() => {
+                        window.location.href = `/auth/google?intent=register&pair=${PAIR_TOKEN}`;
+                    }, 650);
+                    return;
+                }
+                if (data.status === 'complete') {
+                    clearInterval(pairPollInterval);
+                    const ps = document.getElementById('pairStatus');
+                    if (data.session_token) {
+                        localStorage.setItem('sessionToken', data.session_token);
+                    }
+                    if (data.redirect_pc) {
+                        ps.textContent = '\u2713 Google done on phone. Continue face setup on this PC...';
+                        ps.style.display = 'block';
+                        setTimeout(() => {
+                            window.location.href = data.dest || '/setup-face';
+                        }, 700);
+                        return;
+                    }
+                    ps.textContent = '\u2713 Google sign-in completed on phone.';
+                    ps.style.display = 'block';
+                }
+            } catch(e) {}
+        }
+        pairPollInterval = setInterval(pollPair, 1500);
+        initQR();
+    </script>
+</body>
+</html>

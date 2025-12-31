@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Mirror</title>
+    <link rel="stylesheet" href="/static/css/mirror.css?v=25">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <!-- ── HEADER ── -->
+    <header class="sm-header">
+        <!-- Left: clock + date -->
+        <div class="sm-clock-block">
+            <div class="sm-time" id="timeDisplay">00:00</div>
+            <div class="sm-date" id="dateDisplay">Wednesday February 18th</div>
+        </div>
+
+        <!-- Right: weather -->
+        <div class="sm-weather-block" id="weatherWidget">
+            <div class="sm-weather-top">
+                <span class="sm-weather-icon" id="weatherIcon">☁</span>
+                <span class="sm-weather-temp" id="weatherTemp">--°C</span>
+            </div>
+            <div class="sm-weather-meta">
+                <span class="sm-weather-condition-loc">
+                    <span id="weatherCondition">--</span>
+                    &nbsp;•&nbsp;
+                    <span id="weatherLocation">--</span>
+                </span>
+                <span class="sm-weather-minmax">
+                    L: <span id="weatherLow">--</span>&nbsp; H: <span id="weatherHigh">--</span>
+                </span>
+            </div>
+        </div>
+    </header>
+
+    <!-- ── MAIN (greeting top, voice bottom) ── -->
+    <main class="sm-main">
+        <!-- Greeting at top -->
+        <div class="sm-greeting-wrap">
+            <div class="sm-greeting" id="greeting">GOOD MORNING</div>
+        </div>
+
+        <!-- Voice + status grouped at bottom -->
+        <div class="sm-voice-bottom">
+            <!-- Response display -->
+            <div class="response-display" id="responseDisplay"></div>
+
+            <!-- Voice ring -->
+            <div class="sm-voice-ring" id="micWrapper">
+                <div class="pulse"></div>
+                <div class="pulse"></div>
+                <div class="pulse"></div>
+                <div class="audio-bars" id="audioBars">
+                    <span></span><span></span><span></span><span></span><span></span>
+                </div>
+                <button class="sm-voice-dot" id="micBtn" title="Always listening"></button>
+            </div>
+            <div class="voice-status" id="voiceStatus"></div>
+        </div>
+    </main>
+
+    <!-- ── FOOTER ── -->
+    <footer class="sm-footer">
+
+        <!-- Left: news -->
+        <div class="sm-news-col" id="newsWidget">
+            <div class="sm-section-label">Latest News</div>
+            <ul class="sm-news-list">
+                <li><span class="sm-news-num">01.</span> Loading news…</li>
+            </ul>
+        </div>
+
+        <!-- Middle: empty -->
+        <div class="sm-footer-mid"></div>
+
+        <!-- Right: schedule -->
+        <div class="sm-schedule-col">
+            <div class="sm-section-label sm-section-label--right">Schedule</div>
+            <div class="sm-schedule-list" id="timelineEvents">
+                <!-- injected by JS -->
+            </div>
+        </div>
+
+    </footer>
+
+    <!-- Corner brackets -->
+    <div class="corner corner-tl"></div>
+    <div class="corner corner-tr"></div>
+    <div class="corner corner-bl"></div>
+    <div class="corner corner-br"></div>
+
+    <!-- Hidden legacy IDs kept for JS compatibility -->
+    <span id="dayName" style="display:none"></span>
+    <div id="jarvisContainer" style="display:none"></div>
+
+    <script src="/static/js/mirror.js?v=25"></script>
+</body>
+</html>
