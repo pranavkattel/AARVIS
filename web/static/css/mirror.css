@@ -1,0 +1,306 @@
+/* ── Reset ── */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* ── Base ── */
+body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: #000;
+    color: #fff;
+    height: 100vh;
+    overflow: hidden;
+    cursor: none;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 28px 36px;
+    user-select: none;
+}
+
+/* ── HEADER ── */
+.sm-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+/* Clock */
+.sm-clock-block { display: flex; flex-direction: column; gap: 6px; }
+.sm-time {
+    font-size: clamp(30px, 4vw, 52px);
+    font-weight: 200;
+    letter-spacing: -0.04em;
+    line-height: 1;
+}
+.sm-date {
+    font-size: 11px;
+    font-weight: 300;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    opacity: 0.65;
+}
+
+/* Weather */
+.sm-weather-block { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.sm-weather-top { display: flex; align-items: center; gap: 18px; }
+.sm-weather-icon { font-size: 22px; font-weight: 200; opacity: 0.85; }
+.sm-weather-temp { font-size: clamp(22px, 3vw, 34px); font-weight: 200; letter-spacing: -0.03em; }
+.sm-weather-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.sm-weather-condition-loc {
+    font-size: 11px;
+    font-weight: 300;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    opacity: 0.65;
+}
+.sm-weather-minmax {
+    font-size: 10px;
+    font-weight: 300;
+    opacity: 0.45;
+    letter-spacing: 0.05em;
+}
+
+/* ── MAIN ── */
+.sm-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+    padding: 0;
+}
+
+/* Greeting */
+.sm-greeting-wrap { margin-bottom: 0; }
+.sm-greeting {
+    font-size: clamp(11px, 1.5vw, 18px);
+    font-weight: 100;
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+    opacity: 0.8;
+}
+.sm-greeting .name { display: none; }
+
+/* Response toast */
+.response-display {
+    position: static;
+    left: unset;
+    transform: none;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 6px;
+    padding: 6px 16px;
+    font-size: 11px;
+    font-weight: 300;
+    letter-spacing: 0.04em;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    white-space: nowrap;
+    max-width: 60vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+    margin-bottom: 6px;
+}
+.response-display.visible { opacity: 1; }
+
+/* Voice ring — bottom group wrapper */
+.sm-voice-bottom {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    padding-bottom: 4px;
+}
+.sm-voice-ring {
+    position: relative;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+.pulse {
+    position: absolute;
+    border: 1px solid rgba(255,255,255,0.35);
+    border-radius: 50%;
+    animation: pulsate 3s ease-out infinite;
+    pointer-events: none;
+}
+.pulse:nth-child(2) { animation-delay: 1s; }
+.pulse:nth-child(3) { animation-delay: 2s; }
+@keyframes pulsate {
+    0%   { width: 28px;  height: 28px;  opacity: 0.8; }
+    100% { width: 90px; height: 90px; opacity: 0;   }
+}
+.sm-voice-dot {
+    position: relative;
+    z-index: 2;
+    width: 8px;
+    height: 8px;
+    background: #fff;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    transition: transform 0.2s ease, background 0.2s ease, opacity 0.3s ease;
+}
+
+/* ── Auto-listening states ── */
+.sm-voice-ring.auto-listening .sm-voice-dot { opacity: 0; }
+.sm-voice-ring.auto-listening .pulse {
+    border-color: rgba(255,255,255,0.25);
+    animation-duration: 3.5s;
+}
+.sm-voice-ring.speech-detected .pulse {
+    border-color: rgba(255,255,255,0.55);
+    animation-duration: 1.6s;
+}
+.sm-voice-ring.thinking-state .sm-voice-dot {
+    opacity: 1;
+    animation: think-pulse 1.2s ease-in-out infinite;
+}
+@keyframes think-pulse {
+    0%, 100% { transform: scale(1); opacity: 0.6; }
+    50%      { transform: scale(1.5); opacity: 1; }
+}
+
+/* Audio bars (equalizer visualisation) */
+.audio-bars {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    position: absolute;
+    z-index: 3;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+}
+.sm-voice-ring.auto-listening .audio-bars { opacity: 1; }
+.audio-bars span {
+    display: block;
+    width: 3px;
+    min-height: 3px;
+    height: 4px;
+    background: rgba(255,255,255,0.55);
+    border-radius: 2px;
+    transition: height 0.06s ease-out;
+}
+.sm-voice-ring.speech-detected .audio-bars span {
+    background: rgba(255,255,255,0.85);
+}
+
+.sm-voice-ring.listening .sm-voice-dot { background: #fff; transform: scale(1.4); }
+
+.voice-status {
+    margin-top: 10px;
+    font-size: 9px;
+    font-weight: 300;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    opacity: 0.45;
+    min-height: 14px;
+}
+.voice-status.listening,
+.voice-status.thinking { opacity: 0.8; }
+
+/* Text input — hidden */
+.sm-text-input { display: none; }
+
+/* ── FOOTER ── */
+.sm-footer {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 24px;
+    align-items: end;
+    height: 160px;
+}
+
+/* Section label */
+.sm-section-label {
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    opacity: 0.38;
+    margin-bottom: 12px;
+}
+.sm-section-label--right { text-align: right; }
+
+/* NEWS col */
+.sm-news-col {
+    height: 100%;
+    border-left: 1px solid rgba(255,255,255,0.1);
+    padding-left: 20px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+}
+.sm-news-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 130px;
+    overflow: hidden;
+}
+.sm-news-list li {
+    font-size: 11px;
+    font-weight: 300;
+    line-height: 1.6;
+    opacity: 0.68;
+    transition: opacity 0.2s;
+}
+.sm-news-list li:hover { opacity: 1; }
+.sm-news-num { opacity: 0.3; margin-right: 6px; }
+
+/* Middle spacer */
+.sm-footer-mid {}
+
+/* SCHEDULE col */
+.sm-schedule-col {
+    height: 100%;
+    border-right: 1px solid rgba(255,255,255,0.1);
+    padding-right: 20px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: flex-end;
+}
+.sm-schedule-list {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 14px;
+    width: 100%;
+}
+.schedule-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 5px;
+}
+.schedule-time {
+    font-size: 10px;
+    font-weight: 300;
+    opacity: 0.3;
+    letter-spacing: 0.12em;
+    white-space: nowrap;
+}
+.schedule-card {
+    display: inline-block;
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 3px;
+    padding: 7px 14px;
+}
+.schedule-card-title {
+    font-size: 11px;
+    font-weight: 300;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+}
+
+/* ── CORNER BRACKETS ── removed */
+.corner { display: none; }
