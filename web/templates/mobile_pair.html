@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Smart Mirror Setup</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; }
+        body {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            display: flex; align-items: center; justify-content: center; padding: 24px;
+        }
+        .card {
+            background: #fff; border-radius: 20px;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.3);
+            padding: 40px 28px 32px;
+            width: 100%; max-width: 360px; text-align: center;
+        }
+        .logo { font-size: 56px; margin-bottom: 12px; }
+        h1 { font-size: 22px; color: #1a1a2e; margin-bottom: 8px; }
+        .sub { color: #888; font-size: 14px; margin-bottom: 22px; line-height: 1.6; }
+        .steps {
+            background: rgba(102,126,234,.08); border-radius: 10px;
+            padding: 14px 16px; margin-bottom: 24px; text-align: left;
+        }
+        .step { display: flex; gap: 10px; font-size: 13px; color: #555; margin-bottom: 8px; line-height: 1.5; }
+        .step:last-child { margin-bottom: 0; }
+        .num { font-weight: 700; color: #667eea; min-width: 18px; }
+        .btn-auth {
+            display: flex; align-items: center; justify-content: center; gap: 12px;
+            width: 100%; padding: 16px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: #fff; border: none; border-radius: 12px;
+            font-size: 16px; font-weight: 600; cursor: pointer;
+            transition: opacity .2s;
+        }
+        .btn-auth:hover { opacity: .9; }
+        .btn-auth:disabled { opacity: .5; cursor: default; }
+        .success {
+            display: none; background: rgba(56,142,60,.07);
+            border: 1.5px solid #a5d6a7; border-radius: 12px;
+            padding: 20px 16px; margin-top: 20px;
+            color: #2e7d32; font-size: 14px; line-height: 1.8;
+        }
+        .success .tick { font-size: 40px; margin-bottom: 8px; }
+        .err-box {
+            display: none; background: rgba(244,67,54,.08);
+            border-radius: 10px; padding: 12px; margin-top: 14px;
+            color: #c62828; font-size: 13px; line-height: 1.5;
+        }
+        .btn-fallback {
+            display: none; align-items: center; justify-content: center; gap: 10px;
+            width: 100%; padding: 12px; margin-top: 10px;
+            background: #fff; color: #3c4043; border: 1.5px solid #dadce0; border-radius: 10px;
+            font-size: 14px; font-weight: 600; cursor: pointer;
+        }
+        .spinner {
+            display: inline-block; width: 18px; height: 18px;
+            border: 3px solid rgba(255,255,255,.3); border-top-color: #fff;
+            border-radius: 50%; animation: spin .7s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="logo">🪞</div>
+        <h1>Smart Mirror Setup</h1>
+        <p class="sub">Sign in with Google on your phone to connect Gmail &amp; Calendar.</p>
+
+        <div class="steps">
+            <div class="step"><span class="num">1.</span><span>Tap the button to open Google sign-in on this phone</span></div>
+            <div class="step"><span class="num">2.</span><span>Choose your Google account and allow Gmail &amp; Calendar access</span></div>
+            <div class="step"><span class="num">3.</span><span>If face setup is needed, your PC will continue there automatically</span></div>
+        </div>
+
+        <button class="btn-auth" id="authBtn" onclick="startGoogle()">
+            Continue with Google
+        </button>
+
+        <div class="success" id="successBox">
+            <div class="tick">&#9989;</div>
+            <strong>Google sign-in started.</strong><br>
+            Continue on this phone.<br>
+            Your PC will only be used if face setup is required.
+        </div>
+
+        <div class="err-box" id="errBox">
+            Could not start Google sign-in. Please retry from your PC QR code.
+        </div>
+
+        <button class="btn-fallback" id="pcFallbackBtn" onclick="triggerPcOAuth()">
+            Open Google sign-in on PC instead
+        </button>
+    </div>
+
+    <script>
+        const PAIR_TOKEN = '{{ pair_token }}';
+        const INTENT = '{{ intent }}';
+
+        function startGoogle() {
+            const btn = document.getElementById('authBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span>&nbsp; Opening...';
+            document.getElementById('errBox').style.display = 'none';
+            document.getElementById('successBox').style.display = 'block';
+            setTimeout(() => {
+                window.location.href = `/auth/google?intent=${encodeURIComponent(INTENT || 'register')}&pair=${encodeURIComponent(PAIR_TOKEN)}`;
+            }, 350);
+        }
+
+        async function triggerPcOAuth() {
+            const btn = document.getElementById('pcFallbackBtn');
+            btn.disabled = true;
+            btn.textContent = 'Sending to PC...';
+            try {
+                const res = await fetch(`/api/pair-trigger/${PAIR_TOKEN}`, { method: 'POST' });
+                if (!res.ok) throw new Error('trigger_failed');
+                document.getElementById('errBox').textContent = 'Sent to PC. Continue Google sign-in on your PC screen.';
+            } catch (e) {
+                document.getElementById('errBox').textContent = 'Could not notify PC. Refresh and try again.';
+                btn.disabled = false;
+                btn.textContent = 'Open Google sign-in on PC instead';
+            }
+        }
+
+        (function () {
+            const p = new URLSearchParams(window.location.search);
+            const err = p.get('error');
+            if (err === 'private_ip_callback') {
+                const errBox = document.getElementById('errBox');
+                errBox.style.display = 'block';
+                errBox.textContent = 'Google blocks OAuth callback on private IP URLs. Use PC fallback now, or configure a public HTTPS callback URL.';
+                document.getElementById('pcFallbackBtn').style.display = 'flex';
+                document.getElementById('successBox').style.display = 'none';
+                const authBtn = document.getElementById('authBtn');
+                authBtn.disabled = false;
+                authBtn.innerHTML = 'Continue with Google';
+            } else if (err === 'oauth_start_failed') {
+                const errBox = document.getElementById('errBox');
+                errBox.style.display = 'block';
+                errBox.textContent = 'Google sign-in could not start on this device. Use PC fallback or verify OAuth credentials on the server.';
+                document.getElementById('pcFallbackBtn').style.display = 'flex';
+                document.getElementById('successBox').style.display = 'none';
+                const authBtn = document.getElementById('authBtn');
+                authBtn.disabled = false;
+                authBtn.innerHTML = 'Continue with Google';
+            }
+        })();
+    </script>
+</body>
+</html>

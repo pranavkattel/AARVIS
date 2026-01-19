@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <title>All Done!</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; }
+        body {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            display: flex; align-items: center; justify-content: center; padding: 24px;
+        }
+        .card {
+            background: #fff; border-radius: 20px;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.3);
+            padding: 48px 28px 40px;
+            width: 100%; max-width: 340px; text-align: center;
+        }
+        .check { font-size: 72px; margin-bottom: 16px; }
+        h1 { font-size: 22px; color: #1a1a2e; margin-bottom: 10px; }
+        p { color: #666; font-size: 14px; line-height: 1.7; }
+        .pc-hint {
+            margin-top: 24px; background: rgba(102,126,234,.08);
+            border-radius: 10px; padding: 14px;
+            font-size: 13px; color: #667eea; font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="check">✅</div>
+        <h1 id="title">You're all set!</h1>
+        <p id="desc">Google sign-in was successful. Your Gmail and Calendar are now connected.</p>
+        <div class="pc-hint" id="pcHint">
+            👀 Look at your PC screen — face registration is starting there now.
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            const mode = '{{ mode }}';
+            if (mode === 'done_mobile') {
+                document.getElementById('title').textContent = 'Phone sign-in complete';
+                document.getElementById('desc').textContent = 'Google sign-in was successful on your phone. You can close this page.';
+                document.getElementById('pcHint').textContent = 'No PC action is needed right now.';
+            }
+        })();
+    </script>
+</body>
+</html>
