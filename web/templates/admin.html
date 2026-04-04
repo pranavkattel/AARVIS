@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AARVIS Admin</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #0f1117; color: #e0e0e0; min-height: 100vh;
+        }
+        header {
+            background: #1a1a2e; border-bottom: 1px solid rgba(255,255,255,0.08);
+            padding: 16px 32px; display: flex; align-items: center; gap: 16px;
+        }
+        header h1 { font-size: 1.2rem; font-weight: 700; color: #a78bfa; }
+        header span { color: #666; font-size: 0.85rem; }
+        .badge { background: #4f46e5; color: #fff; font-size: 0.75rem; padding: 2px 10px; border-radius: 20px; }
+
+        .container { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+
+        .stats { display: flex; gap: 16px; margin-bottom: 28px; flex-wrap: wrap; }
+        .stat-card {
+            background: #1a1a2e; border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 12px; padding: 18px 24px; min-width: 150px;
+        }
+        .stat-card .num { font-size: 2rem; font-weight: 700; color: #a78bfa; }
+        .stat-card .label { font-size: 0.8rem; color: #888; margin-top: 2px; }
+
+        .toolbar {
+            display: flex; gap: 12px; margin-bottom: 16px; align-items: center; flex-wrap: wrap;
+        }
+        .search {
+            flex: 1; min-width: 200px; background: #1a1a2e;
+            border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;
+            padding: 9px 14px; color: #e0e0e0; font-size: 0.9rem;
+            outline: none;
+        }
+        .search:focus { border-color: #a78bfa; }
+
+        table { width: 100%; border-collapse: collapse; }
+        .table-wrap {
+            background: #1a1a2e; border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 14px; overflow: hidden;
+        }
+        thead th {
+            background: #16162a; padding: 12px 16px; text-align: left;
+            font-size: 0.78rem; text-transform: uppercase; color: #888;
+            letter-spacing: 0.05em; font-weight: 600;
+        }
+        tbody tr { border-top: 1px solid rgba(255,255,255,0.05); transition: background 0.15s; }
+        tbody tr:hover { background: rgba(255,255,255,0.03); }
+        td { padding: 13px 16px; font-size: 0.88rem; vertical-align: middle; }
+        td .sub { font-size: 0.76rem; color: #777; margin-top: 2px; }
+
+        .badge-google { background: rgba(66,133,244,0.18); color: #4a9eff; border-radius: 6px; padding: 2px 8px; font-size: 0.73rem; font-weight: 600; }
+        .badge-manual { background: rgba(167,139,250,0.15); color: #a78bfa; border-radius: 6px; padding: 2px 8px; font-size: 0.73rem; font-weight: 600; }
+        .badge-face { background: rgba(74,222,128,0.15); color: #4ade80; border-radius: 6px; padding: 2px 8px; font-size: 0.73rem; }
+
+        .actions { display: flex; gap: 8px; }
+        .btn-icon {
+            background: transparent; border: 1px solid rgba(255,255,255,0.12);
+            color: #ccc; border-radius: 7px; padding: 5px 12px; cursor: pointer;
+            font-size: 0.8rem; transition: all 0.15s;
+        }
+        .btn-icon:hover { background: rgba(255,255,255,0.07); }
+        .btn-icon.del:hover { border-color: #f87171; color: #f87171; }
+
+        /* Modal */
+        .modal-bg {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.65); backdrop-filter: blur(4px);
+            z-index: 100; align-items: center; justify-content: center;
+        }
+        .modal-bg.open { display: flex; }
+        .modal {
+            background: #1a1a2e; border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 16px; padding: 32px; width: 100%; max-width: 440px;
+        }
+        .modal h2 { font-size: 1.1rem; margin-bottom: 20px; }
+        .field { margin-bottom: 14px; }
+        .field label { display: block; font-size: 0.78rem; color: #888; margin-bottom: 4px; text-transform: uppercase; }
+        .field input, .field textarea {
+            width: 100%; background: #0f1117;
+            border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;
+            padding: 9px 12px; color: #e0e0e0; font-size: 0.88rem; outline: none;
+        }
+        .field input:focus, .field textarea:focus { border-color: #a78bfa; }
+        .modal-actions { display: flex; gap: 10px; margin-top: 22px; }
+        .btn-save {
+            flex: 1; background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            color: #fff; border: none; border-radius: 9px; padding: 10px;
+            font-weight: 600; cursor: pointer; font-size: 0.9rem;
+        }
+        .btn-cancel {
+            flex: 1; background: transparent;
+            border: 1px solid rgba(255,255,255,0.15); color: #aaa;
+            border-radius: 9px; padding: 10px; cursor: pointer; font-size: 0.9rem;
+        }
+
+        /* Toast */
+        #toast {
+            position: fixed; bottom: 28px; right: 28px;
+            background: #1e1e3a; border: 1px solid rgba(255,255,255,0.12);
+            color: #e0e0e0; padding: 12px 20px; border-radius: 10px;
+            font-size: 0.875rem; transform: translateY(80px); opacity: 0;
+            transition: all 0.3s; z-index: 200;
+        }
+        #toast.show { transform: translateY(0); opacity: 1; }
+        #toast.ok { border-color: #4ade80; color: #4ade80; }
+        #toast.err { border-color: #f87171; color: #f87171; }
+
+        .empty { text-align: center; padding: 48px; color: #555; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+<header>
+    <h1>&#9881; AARVIS Admin</h1>
+    <span class="badge">User Management</span>
+</header>
+
+<div class="container">
+    <div class="stats">
+        <div class="stat-card"><div class="num" id="statTotal">—</div><div class="label">Total Users</div></div>
+        <div class="stat-card"><div class="num" id="statGoogle">—</div><div class="label">Google Users</div></div>
+        <div class="stat-card"><div class="num" id="statFace">—</div><div class="label">Face Enrolled</div></div>
+        <div class="stat-card"><div class="num" id="statManual">—</div><div class="label">Manual Users</div></div>
+    </div>
+
+    <div class="toolbar">
+        <input class="search" id="searchBox" placeholder="&#128269;  Search by name, username or email…" oninput="filterTable()">
+    </div>
+
+    <div class="table-wrap">
+        <table id="userTable">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>User</th>
+                    <th>Email</th>
+                    <th>Location</th>
+                    <th>Auth Type</th>
+                    <th>Face</th>
+                    <th>Joined</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="userBody">
+                <tr><td colspan="8" class="empty">Loading…</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal-bg" id="editModal">
+    <div class="modal">
+        <h2>&#9998; Edit User</h2>
+        <input type="hidden" id="editId">
+        <div class="field"><label>Full Name</label><input id="editName"></div>
+        <div class="field"><label>Email</label><input id="editEmail"></div>
+        <div class="field"><label>Location</label><input id="editLocation"></div>
+        <div class="field"><label>Interests</label><input id="editInterests" placeholder="comma-separated"></div>
+        <div class="modal-actions">
+            <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+            <button class="btn-save" onclick="saveEdit()">Save Changes</button>
+        </div>
+    </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+    let allUsers = [];
+    let faceUsers = [];
+
+    async function loadUsers() {
+        const [usersRes, faceRes] = await Promise.all([
+            fetch('/api/admin/users'),
+            fetch('/api/admin/face-list')
+        ]);
+        allUsers = await usersRes.json();
+        faceUsers = await faceRes.json();
+        renderTable(allUsers);
+        updateStats();
+    }
+
+    function updateStats() {
+        document.getElementById('statTotal').textContent = allUsers.length;
+        document.getElementById('statGoogle').textContent = allUsers.filter(u => u.google_id).length;
+        document.getElementById('statFace').textContent = allUsers.filter(u => faceUsers.includes(u.username)).length;
+        document.getElementById('statManual').textContent = allUsers.filter(u => !u.google_id).length;
+    }
+
+    function renderTable(users) {
+        const tbody = document.getElementById('userBody');
+        if (!users.length) {
+            tbody.innerHTML = '<tr><td colspan="8" class="empty">No users found.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = users.map(u => {
+            const hasFace = faceUsers.includes(u.username);
+            const authBadge = u.google_id
+                ? '<span class="badge-google">Google</span>'
+                : '<span class="badge-manual">Manual</span>';
+            const faceBadge = hasFace ? '<span class="badge-face">&#10003; Yes</span>' : '<span style="color:#555">No</span>';
+            const joined = u.created_at ? u.created_at.split(' ')[0] : '—';
+            return `<tr>
+                <td>${u.id}</td>
+                <td>
+                    <strong>${esc(u.full_name)}</strong>
+                    <div class="sub">@${esc(u.username)}</div>
+                </td>
+                <td>${esc(u.email)}</td>
+                <td>${esc(u.location || '—')}</td>
+                <td>${authBadge}</td>
+                <td>${faceBadge}</td>
+                <td>${joined}</td>
+                <td><div class="actions">
+                    <button class="btn-icon" onclick="openEdit(${u.id})">&#9998; Edit</button>
+                    <button class="btn-icon del" onclick="deleteUser(${u.id}, '${esc(u.username)}')">&#128465; Delete</button>
+                </div></td>
+            </tr>`;
+        }).join('');
+    }
+
+    function filterTable() {
+        const q = document.getElementById('searchBox').value.toLowerCase();
+        const filtered = allUsers.filter(u =>
+            u.username.toLowerCase().includes(q) ||
+            u.email.toLowerCase().includes(q) ||
+            (u.full_name || '').toLowerCase().includes(q)
+        );
+        renderTable(filtered);
+    }
+
+    function openEdit(id) {
+        const u = allUsers.find(x => x.id === id);
+        if (!u) return;
+        document.getElementById('editId').value = id;
+        document.getElementById('editName').value = u.full_name || '';
+        document.getElementById('editEmail').value = u.email || '';
+        document.getElementById('editLocation').value = u.location || '';
+        document.getElementById('editInterests').value = u.interests || '';
+        document.getElementById('editModal').classList.add('open');
+    }
+
+    function closeModal() {
+        document.getElementById('editModal').classList.remove('open');
+    }
+
+    async function saveEdit() {
+        const id = document.getElementById('editId').value;
+        const body = {
+            full_name:  document.getElementById('editName').value,
+            email:      document.getElementById('editEmail').value,
+            location:   document.getElementById('editLocation').value,
+            interests:  document.getElementById('editInterests').value,
+        };
+        const res = await fetch(`/api/admin/users/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        if (res.ok) { toast('User updated', 'ok'); closeModal(); loadUsers(); }
+        else { toast('Update failed', 'err'); }
+    }
+
+    async function deleteUser(id, username) {
+        if (!confirm(`Delete user "@${username}"? This cannot be undone.`)) return;
+        const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' });
+        if (res.ok) { toast('User deleted', 'ok'); loadUsers(); }
+        else { toast('Delete failed', 'err'); }
+    }
+
+    function toast(msg, type = 'ok') {
+        const el = document.getElementById('toast');
+        el.textContent = msg;
+        el.className = `show ${type}`;
+        setTimeout(() => el.className = '', 2800);
+    }
+
+    function esc(s) {
+        return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    document.getElementById('editModal').addEventListener('click', function(e) {
+        if (e.target === this) closeModal();
+    });
+
+    loadUsers();
+</script>
+</body>
+</html>
