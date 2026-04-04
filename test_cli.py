@@ -6,6 +6,8 @@ This lets you chat with AARVIS in your terminal without needing
 the FastAPI server, browser, or WebSocket connection.
 TTS is optional - it will speak responses if Kokoro is installed.
 Voice mode: type 'voice on' to use microphone input (STT) + spoken output (TTS).
+
+
 """
 
 import os
