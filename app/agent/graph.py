@@ -8,6 +8,10 @@ from app.agent.state import AgentState
 from app.agent.tools import tools
 from datetime import datetime, timedelta
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Bind all tools to Ollama
 #model = ChatOllama(model="qwen3:4b", temperature=0.7).bind_tools(tools)
@@ -15,8 +19,15 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 model = ChatGoogleGenerativeAI(
     model="gemini-3-flash-preview",
     temperature=0.7,
-    google_api_key=os.getenv("GOOGLE_API_KEY", "AIzaSyC_J-xUE_wuw1asRszGTOsUC9DTWSp2N58")
+    google_api_key=os.getenv("GEMINI_API_KEY")
 ).bind_tools(tools)
+
+# model = ChatGroq(
+#     model="openai/gpt-oss-20b",  # Changed to a valid Groq model name; change to what you need
+#     api_key=os.getenv("GROQ_API_KEY"),
+#     temperature=0.6,
+#     max_tokens=1024,
+# ).bind_tools(tools)
 
 SYSTEM_PROMPT_TEMPLATE = """/no_think
 You are AARVIS, a smart mirror voice assistant. You speak naturally and concisely.

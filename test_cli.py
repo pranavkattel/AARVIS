@@ -20,6 +20,53 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
+from langchain_core.callbacks import BaseCallbackHandler
+import time
+
+class ProfilerCallbackHandler(BaseCallbackHandler):
+    """Logs LLM and Tool execution times to terminal for profiling latency."""
+    def __init__(self):
+        self.llm_starts = {}
+        self.tool_starts = {}
+        self.total_llm_time = 0.0
+        self.total_tool_time = 0.0
+
+    def on_llm_start(self, serialized, prompts, **kwargs):
+        run_id = kwargs.get('run_id')
+        self.llm_starts[run_id] = time.time()
+        print("\n\n  [PROFILER] 🚀 LLM call started...", end="", flush=True)
+
+    def on_llm_end(self, response, **kwargs):
+        run_id = kwargs.get('run_id')
+        start_time = self.llm_starts.pop(run_id, None)
+        if start_time:
+            elapsed = time.time() - start_time
+            self.total_llm_time += elapsed
+            print(f"\n  [PROFILER] ✅ LLM call finished in {elapsed:.2f}s", flush=True)
+
+    def on_tool_start(self, serialized, input_str, **kwargs):
+        run_id = kwargs.get('run_id')
+        name = serialized.get("name", "unknown") if serialized else "unknown"
+        kwargs['tool_name'] = name # stash it
+        self.tool_starts[run_id] = (time.time(), name)
+        print(f"\n  [PROFILER] ⚙️  Tool '{name}' started...", end="", flush=True)
+
+    def on_tool_end(self, output, **kwargs):
+        run_id = kwargs.get('run_id')
+        start_info = self.tool_starts.pop(run_id, None)
+        if start_info:
+            start_time, name = start_info
+            elapsed = time.time() - start_time
+            self.total_tool_time += elapsed
+            print(f"\n  [PROFILER] 🏁 Tool '{name}' finished in {elapsed:.2f}s", flush=True)
+            
+    def on_tool_error(self, error, **kwargs):
+        run_id = kwargs.get('run_id')
+        start_info = self.tool_starts.pop(run_id, None)
+        if start_info:
+            start_time, name = start_info
+            elapsed = time.time() - start_time
+            print(f"\n  [PROFILER] ❌ Tool '{name}' failed in {elapsed:.2f}s", flush=True)
 
 from app.agent.graph import agent
 from app.database import init_db, get_user_by_username, save_conversation, get_recent_context, DB_PATH
@@ -328,6 +375,9 @@ def run_cli():
         print("\nThinking...", end="", flush=True)
 
         try:
+            start_time = time.time()
+            profiler = ProfilerCallbackHandler()
+
             result = agent.invoke({
                 'messages': messages,
                 'current_user': user['username'],
@@ -341,7 +391,10 @@ def run_cli():
                 'draft_email': None,
                 'final_response': None,
                 'error': None,
-            })
+            }, config={"callbacks": [profiler]})
+            
+            total_time = time.time() - start_time
+            print(f"\n\n[PROFILER] ⏱️  Total Turn Time: {total_time:.2f}s (LLM: {profiler.total_llm_time:.2f}s | Tools: {profiler.total_tool_time:.2f}s)")
 
             import re as _re
 
