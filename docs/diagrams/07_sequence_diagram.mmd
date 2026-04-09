@@ -1,0 +1,35 @@
+sequenceDiagram
+    autonumber
+    actor User
+    participant UI as Mirror Browser UI
+    participant WS as FastAPI WebSocket
+    participant STT as Faster Whisper
+    participant Agent as LangGraph Agent
+    participant Tools as Tool Layer
+    participant APIs as Google/Weather/News APIs
+    participant TTS as Kokoro TTS
+
+    User->>UI: Speak a command
+    UI->>WS: Send recorded audio
+    WS->>STT: Transcribe audio bytes
+    STT-->>WS: Transcript text
+    WS-->>UI: Show transcript
+    WS->>Agent: Invoke agent with user context and history
+
+    alt Tool is needed
+        Agent->>Tools: Call selected tool
+        Tools->>APIs: Request data or perform action
+        APIs-->>Tools: Response payload
+        Tools-->>Agent: Tool result
+    else No tool needed
+        Agent-->>Agent: Generate direct response
+    end
+
+    Agent-->>WS: Stream response tokens
+    loop Sentence by sentence
+        WS->>TTS: Convert sentence to audio
+        TTS-->>WS: WAV audio bytes
+        WS-->>UI: Response chunk + TTS audio
+    end
+
+    UI-->>User: Display text and play spoken reply

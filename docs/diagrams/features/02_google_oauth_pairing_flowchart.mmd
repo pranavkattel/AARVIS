@@ -1,0 +1,29 @@
+﻿flowchart TD
+    A([Start]) --> B["Open register or login page"]
+    B --> C["Server creates pair token and QR link"]
+    C --> D{"Continue on PC or phone?"}
+
+    D -- PC --> E["Open /auth/google"]
+    E --> F["Redirect to Google consent screen"]
+    F --> G["Google returns code to callback"]
+    G --> H["Exchange code for tokens and profile"]
+    H --> I["Create or update Google user"]
+    I --> J{"Face already enrolled?"}
+    J -- Yes --> K["Issue session and redirect to dashboard"]
+    J -- No --> L["Issue session and redirect to setup-face"]
+
+    D -- Phone --> M["Scan QR and open mobile-connect page"]
+    M --> N["Phone starts Google OAuth"]
+    N --> O["Google returns code to callback"]
+    O --> P["Server exchanges code and stores pair completion"]
+    P --> Q["PC polls /api/pair-status"]
+    Q --> R{"Pair complete?"}
+    R -- No --> Q
+    R -- Yes --> S{"Face already enrolled?"}
+    S -- Yes --> T["PC stores session token and opens dashboard"]
+    S -- No --> U["PC stores session token and opens setup-face"]
+
+    K --> V([End])
+    L --> V
+    T --> V
+    U --> V

@@ -1,0 +1,23 @@
+﻿flowchart TD
+    A([Start]) --> B{"Calendar feature entry point?"}
+
+    B -- Dashboard view --> C["Browser fetches /api/calendar"]
+    C --> D["Server gets today's Google Calendar events"]
+    D --> E["Format events for schedule widget"]
+    E --> F["Return events to browser"]
+    F --> G["Render schedule panel"]
+
+    B -- Voice request --> H["User asks AARVIS about schedule or meeting"]
+    H --> I["LangGraph detects calendar intent"]
+    I --> J{"Requested action?"}
+    J -- Read --> K["Call get_calendar_today or get_upcoming_calendar"]
+    J -- Create --> L["Confirm title, date, and time"]
+    J -- Update/Delete --> M["Confirm event ID and action"]
+    L --> N["Call create_calendar_event"]
+    M --> O["Call update_calendar_event or delete_calendar_event"]
+    K --> P["Speak schedule result"]
+    N --> P
+    O --> P
+
+    G --> Q([End])
+    P --> Q

@@ -1,0 +1,25 @@
+﻿flowchart TD
+    A([Start]) --> B["Dashboard enables auto listening"]
+    B --> C{"User input type?"}
+    C -- Voice --> D["Capture browser audio with VAD"]
+    D --> E["Send audio over WebSocket"]
+    E --> F["Transcribe with Faster Whisper"]
+    F --> G["Build agent state with user context and history"]
+
+    C -- Text --> H["Send typed message over WebSocket"]
+    H --> G
+
+    G --> I["Invoke LangGraph agent"]
+    I --> J{"Tool required?"}
+    J -- Yes --> K["Call weather, news, calendar, or email tool"]
+    J -- No --> L["Generate direct response"]
+    K --> L
+    L --> M["Stream response tokens to frontend"]
+    M --> N["Split output into sentences"]
+    N --> O["Generate TTS audio for each sentence"]
+    O --> P["Play response audio in browser"]
+    P --> Q{"User says bye or logout?"}
+    Q -- No --> R["Return to listening state"]
+    R --> C
+    Q -- Yes --> S["Clear session and redirect to login"]
+    S --> T([End])

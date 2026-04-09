@@ -1,0 +1,43 @@
+flowchart LR
+    U[User]
+    A[Admin]
+    G[Google Services]
+    W[Weather API]
+    N[News API]
+
+    P1["1.0 Authentication and Session Management"]
+    P2["2.0 Face Recognition and Enrollment"]
+    P3["3.0 Voice Assistant Orchestration"]
+    P4["4.0 Information and Action Services"]
+    P5["5.0 Admin Management"]
+
+    D1[("D1 Users and OAuth Tokens")]
+    D2[("D2 Face Database")]
+    D3[("D3 Conversation History")]
+    D4[("D4 Contacts and Config Files")]
+
+    U --> P1
+    U --> P2
+    U --> P3
+    A --> P5
+
+    P1 <--> D1
+    P2 <--> D2
+    P3 <--> D3
+    P4 <--> D1
+    P4 <--> D4
+    P5 <--> D1
+    P5 <--> D2
+
+    P3 --> P4
+    P4 --> G
+    P4 --> W
+    P4 --> N
+    G --> P4
+    W --> P4
+    N --> P4
+
+    P1 --> U
+    P2 --> U
+    P3 --> U
+    P5 --> A

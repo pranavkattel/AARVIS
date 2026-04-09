@@ -17,7 +17,18 @@
             padding: 40px 36px 32px; width: 100%; max-width: 420px;
             text-align: center;
         }
-        .logo { font-size: 52px; margin-bottom: 10px; }
+        .brand-mark {
+            display: inline-block;
+            margin-bottom: 14px;
+            padding: 7px 14px;
+            border-radius: 999px;
+            border: 1px solid #e6e8f0;
+            color: #667eea;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+        }
         h1 { font-size: 24px; color: #1a1a2e; margin-bottom: 6px; }
         .subtitle { color: #888; font-size: 14px; margin-bottom: 28px; }
         .btn-google {
@@ -29,8 +40,23 @@
         }
         .btn-google:hover { box-shadow: 0 3px 14px rgba(0,0,0,0.18); border-color: #bbb; }
         .perks { margin: 22px 0; text-align: left; display: flex; flex-direction: column; gap: 10px; }
-        .perk { display: flex; align-items: center; gap: 12px; font-size: 14px; color: #444; }
-        .perk-icon { font-size: 20px; flex-shrink: 0; }
+        .perk {
+            position: relative;
+            padding-left: 18px;
+            font-size: 14px;
+            color: #444;
+            line-height: 1.5;
+        }
+        .perk::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 8px;
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #667eea;
+        }
         .divider { display: flex; align-items: center; gap: 10px; color: #ccc; font-size: 13px; margin: 18px 0 10px; }
         .divider::before, .divider::after { content:''; flex:1; height:1px; background:#eee; }
         .toggle-btn { background:none; border:none; color:#667eea; font-size:13px; cursor:pointer; text-decoration:underline; }
@@ -64,7 +90,7 @@
 <body>
     <div style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;">
         <div class="card">
-            <div class="logo">&#129710;</div>
+            <div class="brand-mark">AARVIS</div>
             <h1>Join Smart Mirror</h1>
             <p class="subtitle">One click &mdash; your Gmail &amp; Calendar connect automatically</p>
 
@@ -81,10 +107,10 @@
             </a>
 
             <div class="perks">
-                <div class="perk"><span class="perk-icon">&#128197;</span> Live Google Calendar &mdash; voice scheduling</div>
-                <div class="perk"><span class="perk-icon">&#9993;&#65039;</span> Gmail &mdash; read &amp; send by voice</div>
-                <div class="perk"><span class="perk-icon">&#129302;</span> AARVIS AI personalised to your account</div>
-                <div class="perk"><span class="perk-icon">&#128274;</span> No passwords &mdash; tokens stored locally only</div>
+                <div class="perk">Live Google Calendar &mdash; voice scheduling</div>
+                <div class="perk">Gmail &mdash; read &amp; send by voice</div>
+                <div class="perk">AARVIS AI personalised to your account</div>
+                <div class="perk">No passwords &mdash; tokens stored locally only</div>
             </div>
 
             <div class="divider">or</div>
@@ -117,14 +143,14 @@
                 </div>
                 <div class="err" id="emailErr"></div>
                 <button class="btn-submit" onclick="handleEmailRegister(event)">Create Account</button>
-                <p class="note">&#9888;&#65039; Email accounts won't have Gmail / Calendar access.</p>
+                <p class="note">Email accounts won't have Gmail / Calendar access.</p>
             </div>
 
             <p class="footer-link">Already have an account? <a href="/login">Sign in</a></p>
 
             <!-- QR code for phone access -->
             <div class="qr-section">
-                <div class="qr-label">&#128242; Scan to register from your phone (same Wi-Fi)</div>
+                <div class="qr-label">Scan to register from your phone (same Wi-Fi)</div>
                 <div id="qrcode"></div>
                 <div class="qr-url" id="qrUrl"></div>
                 <div id="pairStatus" style="display:none; margin-top:8px; color:#667eea; font-size:12px; font-weight:600;"></div>
@@ -223,7 +249,7 @@
                 if (data.status === 'triggered') {
                     clearInterval(pairPollInterval);
                     const ps = document.getElementById('pairStatus');
-                    ps.textContent = '\u2713 Phone requested PC fallback. Opening Google sign-in here...';
+                    ps.textContent = 'Phone requested PC fallback. Opening Google sign-in here...';
                     ps.style.display = 'block';
                     setTimeout(() => {
                         window.location.href = `/auth/google?intent=register&pair=${PAIR_TOKEN}`;
@@ -237,14 +263,14 @@
                         localStorage.setItem('sessionToken', data.session_token);
                     }
                     if (data.redirect_pc) {
-                        ps.textContent = '\u2713 Google done on phone. Continue face setup on this PC...';
+                        ps.textContent = 'Google sign-in completed on phone. Continue face setup on this PC...';
                         ps.style.display = 'block';
                         setTimeout(() => {
                             window.location.href = data.dest || '/setup-face';
                         }, 700);
                         return;
                     }
-                    ps.textContent = '\u2713 Google sign-in completed on phone.';
+                    ps.textContent = 'Google sign-in completed on phone.';
                     ps.style.display = 'block';
                 }
             } catch(e) {}

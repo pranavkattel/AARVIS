@@ -1,0 +1,83 @@
+flowchart LR
+    subgraph Clients["Client Layer"]
+        U1["Mirror Browser UI"]
+        U2["Mobile Browser for QR/OAuth"]
+        U3["CLI Test Client"]
+    end
+
+    subgraph App["Application Layer - FastAPI"]
+        R1["Jinja Pages and REST APIs"]
+        R2["WebSocket Voice Channel"]
+        R3["Session and Auth Manager"]
+        R4["Admin and Pairing Routes"]
+    end
+
+    subgraph AI["AI and Processing Layer"]
+        A1["LangGraph Agent"]
+        A2["Tool Layer"]
+        A3["Faster Whisper STT"]
+        A4["Kokoro TTS"]
+        A5["Face Recognition Service"]
+    end
+
+    subgraph Models["Models and Runtime"]
+        M1["Gemini Chat Model"]
+        M2["Ollama Local Models"]
+        M3["InsightFace FaceAnalysis"]
+        M4["Custom FaceEmbeddingModel"]
+    end
+
+    subgraph Data["Data Layer"]
+        D1[("SQLite smart_mirror.db")]
+        D2[("face_database.pkl")]
+        D3[("contacts.csv")]
+        D4[("Google credential files")]
+    end
+
+    subgraph External["External Services"]
+        E1["Google OAuth"]
+        E2["Google Calendar API"]
+        E3["Gmail API"]
+        E4["Weather API"]
+        E5["News API"]
+    end
+
+    U1 --> R1
+    U1 --> R2
+    U2 --> R4
+    U3 --> A1
+
+    R1 --> R3
+    R1 --> R4
+    R2 --> A3
+    R2 --> A1
+    A1 --> A2
+    A1 --> A4
+    R1 --> A5
+
+    A1 --> M1
+    A1 --> M2
+    A5 --> M3
+    A5 --> M4
+
+    R3 --> D1
+    R4 --> D1
+    A1 --> D1
+    A2 --> D1
+    A5 --> D2
+    A2 --> D3
+    R3 --> D4
+
+    A2 --> E2
+    A2 --> E3
+    R3 --> E1
+    R1 --> E4
+    R1 --> E5
+
+    classDef layer fill:#eef2ff,stroke:#4f46e5,color:#111827;
+    classDef data fill:#ecfeff,stroke:#0891b2,color:#111827;
+    classDef external fill:#fef3c7,stroke:#d97706,color:#111827;
+
+    class Clients,App,AI,Models layer;
+    class D1,D2,D3,D4 data;
+    class E1,E2,E3,E4,E5 external;

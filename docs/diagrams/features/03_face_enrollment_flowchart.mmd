@@ -1,0 +1,28 @@
+﻿flowchart TD
+    A([Start]) --> B["Open setup-face page"]
+    B --> C["Click Start Camera"]
+    C --> D["Capture frame and call /api/face/process with detect_only"]
+    D --> E{"Face detected?"}
+    E -- No --> F["Prompt user to center face and retry"]
+    F --> D
+    E -- Yes --> G["Set baseline face position"]
+    G --> H["Ask user to look up"]
+    H --> I{"Movement detected?"}
+    I -- No --> H
+    I -- Yes --> J["Ask user to look down"]
+    J --> K{"Movement detected?"}
+    K -- No --> J
+    K -- Yes --> L["Ask user to look left"]
+    L --> M{"Movement detected?"}
+    M -- No --> L
+    M -- Yes --> N["Ask user to look right"]
+    N --> O{"Movement detected?"}
+    O -- No --> N
+    O -- Yes --> P["Capture multiple face frames"]
+    P --> Q{"Enough valid frames collected?"}
+    Q -- No --> R["Show unstable capture message and retry"]
+    R --> C
+    Q -- Yes --> S["POST /api/face/enroll with image set"]
+    S --> T["Generate embeddings and save to face database"]
+    T --> U["Redirect to dashboard"]
+    U --> V([End])

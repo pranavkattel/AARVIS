@@ -1,0 +1,44 @@
+flowchart TD
+    A([Start]) --> B["Open Smart Mirror Application"]
+    B --> C{"Valid session token?"}
+
+    C -- No --> D["Show login/register page"]
+    D --> E{"Auth method selected?"}
+    E -- Manual --> F["Submit username and password"]
+    E -- Google --> G["Start Google OAuth and optional mobile pairing"]
+    F --> H{"Authentication successful?"}
+    G --> H
+    H -- No --> D
+    H -- Yes --> I{"Face enrolled?"}
+
+    C -- Yes --> J["Load mirror dashboard"]
+    I -- No --> K["Open face setup and enroll samples"]
+    I -- Yes --> J
+    K --> J
+
+    J --> L{"Face cache valid?"}
+    L -- No --> M["Capture frame and verify face"]
+    M --> N{"Recognized user?"}
+    N -- No --> O["Hide personalized content and retry"]
+    O --> M
+    N -- Yes --> P["Show personalized dashboard"]
+    L -- Yes --> P
+
+    P --> Q["Capture user text or audio input"]
+    Q --> R{"Audio input?"}
+    R -- Yes --> S["Transcribe with Faster Whisper"]
+    R -- No --> T["Use typed text"]
+    S --> U["Invoke LangGraph agent"]
+    T --> U
+
+    U --> V{"Tool required?"}
+    V -- Yes --> W["Call calendar, email, weather, or news tool"]
+    V -- No --> X["Generate direct response"]
+    W --> X
+    X --> Y["Stream response to UI"]
+    Y --> Z["Convert sentences to speech with Kokoro"]
+    Z --> AA["Play reply and update widgets"]
+    AA --> AB{"Continue session?"}
+    AB -- Yes --> Q
+    AB -- No --> AC["Logout and clear session"]
+    AC --> AD([End])

@@ -1,0 +1,47 @@
+flowchart LR
+    Guest(("Guest User"))
+    User(("Registered User"))
+    Admin(("Admin"))
+    Google(("Google"))
+
+    subgraph System["AARVIS Smart Mirror System"]
+        UC1(["Register account"])
+        UC2(["Sign in with username and password"])
+        UC3(["Sign in with Google"])
+        UC4(["Enroll face"])
+        UC5(["Face login"])
+        UC6(["View personalized dashboard"])
+        UC7(["Receive morning briefing"])
+        UC8(["Talk to AARVIS"])
+        UC9(["Check weather, news, and schedule"])
+        UC10(["Create, update, or delete calendar events"])
+        UC11(["Read and summarize emails"])
+        UC12(["Draft and send emails"])
+        UC13(["Manage users and face enrollments"])
+    end
+
+    Guest --> UC1
+    Guest --> UC2
+    Guest --> UC3
+    Guest --> UC4
+
+    User --> UC4
+    User --> UC5
+    User --> UC6
+    User --> UC7
+    User --> UC8
+    User --> UC9
+    User --> UC10
+    User --> UC11
+    User --> UC12
+
+    Admin --> UC13
+    Google --> UC3
+    Google --> UC10
+    Google --> UC11
+    Google --> UC12
+
+    UC6 --> UC9
+    UC8 --> UC10
+    UC8 --> UC11
+    UC8 --> UC12

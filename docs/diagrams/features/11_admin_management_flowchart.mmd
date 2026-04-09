@@ -1,0 +1,28 @@
+﻿flowchart TD
+    A([Start]) --> B["Admin opens /admin"]
+    B --> C["Browser loads users and face list"]
+    C --> D["Render stats and user table"]
+    D --> E{"Admin action?"}
+
+    E -- Search --> F["Filter rows by name, username, or email"]
+    F --> D
+
+    E -- Edit --> G["Open edit modal"]
+    G --> H["Submit updated fields"]
+    H --> I["PUT /api/admin/users/{id}"]
+    I --> J{"User exists?"}
+    J -- No --> K["Show update failed message"]
+    J -- Yes --> L["Update SQLite user record"]
+    L --> M["Reload table and show success"]
+    K --> D
+    M --> D
+
+    E -- Delete --> N["Confirm deletion"]
+    N --> O["DELETE /api/admin/users/{id}"]
+    O --> P{"User exists?"}
+    P -- No --> Q["Show delete failed message"]
+    P -- Yes --> R["Delete user from SQLite"]
+    R --> S["Remove user's face embeddings from face database"]
+    S --> T["Reload table and show success"]
+    Q --> D
+    T --> D

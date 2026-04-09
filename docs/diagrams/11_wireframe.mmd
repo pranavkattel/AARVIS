@@ -1,0 +1,32 @@
+flowchart TB
+    subgraph Screen["Smart Mirror Dashboard Wireframe"]
+        subgraph Header["Header"]
+            H1["Clock and Date"]
+            H2["Weather Widget"]
+        end
+
+        subgraph Main["Main Interaction Area"]
+            M1["Greeting Banner"]
+            M2["Response Display"]
+            M3["Voice Ring / Mic Button"]
+            M4["Voice Status"]
+        end
+
+        subgraph Footer["Footer"]
+            F1["News Panel"]
+            F2["Spacer / Visual Balance"]
+            F3["Schedule Panel"]
+        end
+    end
+
+    B1["Background Face Verification"] -.-> Main
+    B2["WebSocket Streaming"] -.-> M2
+    B3["Auto Listening VAD"] -.-> M3
+    B4["Periodic Weather, News, Calendar Refresh"] -.-> Header
+    B4 -.-> Footer
+
+    classDef ui fill:#ffffff,stroke:#334155,color:#111827;
+    classDef bg fill:#f1f5f9,stroke:#94a3b8,color:#111827,stroke-dasharray: 5 5;
+
+    class H1,H2,M1,M2,M3,M4,F1,F2,F3 ui;
+    class B1,B2,B3,B4 bg;
