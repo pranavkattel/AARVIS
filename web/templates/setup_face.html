@@ -11,30 +11,20 @@
             background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
             display: flex; align-items: center; justify-content: center;
             font-family: 'Segoe UI', sans-serif; color: #e0e0e0;
+            padding: 24px;
         }
         .card {
             background: rgba(255,255,255,0.05);
             border: 1px solid rgba(255,255,255,0.1);
             border-radius: 20px;
             padding: 40px 36px;
-            width: 100%; max-width: 540px;
+            width: 100%;
+            max-width: 560px;
             text-align: center;
             backdrop-filter: blur(10px);
         }
         h1 { font-size: 1.6rem; font-weight: 700; margin-bottom: 8px; }
-        .sub { color: #aaa; font-size: 0.9rem; margin-bottom: 28px; line-height: 1.5; }
-
-        #videoWrap {
-            position: relative; border-radius: 14px; overflow: hidden;
-            background: #000; width: 100%; aspect-ratio: 4/3;
-            display: none; margin-bottom: 20px;
-        }
-        #faceVideo { width: 100%; height: 100%; object-fit: cover; display: block; }
-        #overlay {
-            position: absolute; bottom: 0; left: 0; right: 0;
-            background: rgba(0,0,0,0.55); padding: 10px;
-            font-size: 0.85rem; color: #fff;
-        }
+        .sub { color: #aaa; font-size: 0.92rem; margin-bottom: 24px; line-height: 1.6; }
         .stage-pill {
             display: inline-block;
             margin-bottom: 14px;
@@ -47,141 +37,157 @@
             color: #cbd5e1;
             background: rgba(15, 23, 42, .55);
         }
-
         .guidance {
-            margin-bottom: 14px;
+            margin-bottom: 16px;
             background: rgba(255,255,255,.04);
             border: 1px solid rgba(255,255,255,.12);
             border-radius: 12px;
             padding: 12px;
             font-size: .88rem;
             color: #d1d5db;
-            text-align: left;
             line-height: 1.55;
-        }
-
-        .checklist {
-            margin-top: 14px;
-            margin-bottom: 18px;
             text-align: left;
+        }
+        #videoWrap {
+            position: relative;
+            border-radius: 14px;
+            overflow: hidden;
+            background: #000;
+            width: 100%;
+            aspect-ratio: 4/3;
+            display: none;
+            margin-bottom: 18px;
+        }
+        #faceVideo {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        #faceMask {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 46%;
+            height: 62%;
+            transform: translate(-50%, -52%);
+            border: 3px solid rgba(255,255,255,.92);
+            border-radius: 46% 46% 42% 42% / 38% 38% 58% 58%;
+            box-shadow: 0 0 0 999px rgba(0,0,0,.28);
+            pointer-events: none;
+            transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+        }
+        #faceMask.aligned {
+            border-color: #4ade80;
+            box-shadow: 0 0 0 999px rgba(0,0,0,.18), 0 0 0 8px rgba(74,222,128,.08);
+        }
+        #faceMask.capturing {
+            border-color: #facc15;
+        }
+        #overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0,0,0,.55);
+            padding: 10px 12px;
+            color: #fff;
+            font-size: 0.85rem;
+        }
+        .progress-bar {
+            height: 6px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 3px;
+            margin-top: 8px;
+        }
+        .progress-fill {
+            height: 100%;
+            width: 0%;
+            border-radius: 3px;
+            background: #4ade80;
+            transition: width 0.16s linear;
+        }
+        .tip-list {
             display: grid;
             gap: 8px;
+            margin-bottom: 18px;
+            text-align: left;
         }
-
-        .check-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 9px 10px;
+        .tip-item {
+            padding: 10px 12px;
             border-radius: 10px;
             background: rgba(255,255,255,.03);
             border: 1px solid rgba(255,255,255,.08);
             color: #cbd5e1;
             font-size: .84rem;
         }
-
-        .check-dot {
-            width: 18px;
-            height: 18px;
-            border-radius: 50%;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 11px;
-            font-weight: 800;
-            background: rgba(148, 163, 184, .28);
-            color: #0f172a;
-            flex-shrink: 0;
+        #msg {
+            min-height: 20px;
+            margin-bottom: 16px;
+            color: #facc15;
+            font-size: 0.85rem;
         }
-
-        .check-item.done {
-            border-color: rgba(74, 222, 128, .55);
-            background: rgba(74, 222, 128, .12);
-            color: #e2ffe8;
+        #success {
+            display: none;
+            margin-bottom: 18px;
+            color: #4ade80;
+            font-size: 0.98rem;
+            font-weight: 600;
         }
-
-        .check-item.done .check-dot {
-            background: #4ade80;
-        }
-        .progress-bar { height: 6px; background: rgba(255,255,255,0.15); border-radius: 3px; margin: 4px 0 0; }
-        .progress-fill { height: 100%; border-radius: 3px; background: #4ade80; transition: width 0.3s; }
-
-        .btn {
-            display: block; width: 100%; padding: 14px;
-            border: none; border-radius: 12px; cursor: pointer;
-            font-size: 0.95rem; font-weight: 600; margin-bottom: 12px;
-            transition: opacity 0.2s;
-        }
-        .btn:hover { opacity: 0.88; }
-        .btn-primary { background: linear-gradient(135deg, #4f46e5, #7c3aed); color: #fff; }
-        .btn-secondary {
-            background: transparent;
-            border: 1px solid rgba(255,255,255,0.2);
-            color: #aaa; font-size: 0.85rem;
-        }
-        .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-        #msg { font-size: 0.85rem; color: #facc15; min-height: 20px; margin-bottom: 16px; }
-        #success { display:none; color: #4ade80; font-size: 1rem; font-weight: 600; margin-bottom: 20px; }
     </style>
 </head>
 <body>
 <div class="card">
-    <h1>&#128247; Set Up Face Login</h1>
-    <p class="sub">Face setup with liveness-like motion checks.<br>First detect your face, then complete movement prompts.</p>
+    <h1>Set Up Face Login</h1>
+    <p class="sub">Center your face inside the mask and hold still. The system will wait 1 second, then capture several photos automatically for better accuracy.</p>
 
-    <div class="stage-pill" id="stagePill">Stage: Waiting for Camera</div>
+    <div class="stage-pill" id="stagePill">Stage: Waiting for camera</div>
+
+    <div class="guidance" id="guideBox">
+        The camera starts automatically on this page. Align your face inside the mask and keep still for one second. Then a few photos will be captured automatically.
+    </div>
+
+    <div class="tip-list">
+        <div class="tip-item">Use normal room lighting and avoid strong backlight.</div>
+        <div class="tip-item">Keep only one face in view and look straight at the camera.</div>
+        <div class="tip-item">Move closer or farther if your face looks too small or too large in the mask.</div>
+    </div>
 
     <div id="videoWrap">
         <video id="faceVideo" autoplay muted playsinline></video>
+        <div id="faceMask"></div>
         <div id="overlay">
-            <span id="overlayText">Getting ready…</span>
-            <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+            <span id="overlayText">Waiting for camera...</span>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
         </div>
     </div>
 
-    <div class="guidance" id="guideBox">Press Start Camera. Keep your face centered in the frame.</div>
-
-    <div class="checklist" id="checklist">
-        <div class="check-item" id="check-face"><span class="check-dot">1</span><span>Face detected</span></div>
-        <div class="check-item" id="check-up"><span class="check-dot">2</span><span>Look up</span></div>
-        <div class="check-item" id="check-down"><span class="check-dot">3</span><span>Look down</span></div>
-        <div class="check-item" id="check-left"><span class="check-dot">4</span><span>Look left</span></div>
-        <div class="check-item" id="check-right"><span class="check-dot">5</span><span>Look right</span></div>
-    </div>
-
     <div id="msg"></div>
-    <div id="success">&#10003; Face enrolled! Redirecting to your mirror…</div>
-
-    <button class="btn btn-primary" id="startBtn" onclick="startCapture()">Start Camera</button>
-    <button class="btn btn-primary" id="enrollBtn" onclick="startEnrollment()" disabled style="display:none;">Register Face Now</button>
-    <button class="btn btn-secondary" onclick="skip()">Skip for now</button>
+    <div id="success">Face photos saved successfully. Redirecting to your mirror...</div>
 </div>
 
 <script>
-    // Store token from URL into localStorage
     const urlParams = new URLSearchParams(window.location.search);
     const urlToken = urlParams.get('token');
-    if (urlToken) { localStorage.setItem('sessionToken', urlToken); }
+    if (urlToken) {
+        localStorage.setItem('sessionToken', urlToken);
+    }
 
-    const TOTAL_FRAMES = 12;
-    const MAX_CAPTURE_ATTEMPTS = 45;
-    const SAMPLE_INTERVAL_MS = 420;
-    const DETECT_INTERVAL_MS = 350;
-
-    const motionState = {
-        faceDetected: false,
-        up: false,
-        down: false,
-        left: false,
-        right: false,
-        baseline: null,
-    };
+    const DETECT_INTERVAL_MS = 220;
+    const CAPTURE_DELAY_MS = 1000;
+    const CAPTURE_FRAME_COUNT = 5;
+    const CAPTURE_FRAME_GAP_MS = 220;
+    const CAPTURE_MAX_ATTEMPTS = 12;
 
     let stream = null;
-    let captured = [];
-    let capturing = false;
     let detectTimer = null;
-    let lastFrameData = null;
+    let holdStart = null;
+    let submitting = false;
+    let detecting = false;
+    let startingCamera = false;
+    let retryTimer = null;
 
     async function detectFrame(frameData) {
         const res = await fetch('/api/face/process', {
@@ -196,169 +202,225 @@
     }
 
     async function startCapture() {
-        const btn = document.getElementById('startBtn');
-        btn.disabled = true;
+        if (stream || startingCamera || submitting) return;
+        startingCamera = true;
         setMsg('');
+        setStage('Starting camera');
+        setGuide('Opening the camera automatically. Please stand in front of the mirror.');
+        setOverlay('Starting camera...');
         try {
             stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
             const vid = document.getElementById('faceVideo');
             vid.srcObject = stream;
             await vid.play();
+            startingCamera = false;
+            if (retryTimer) {
+                clearTimeout(retryTimer);
+                retryTimer = null;
+            }
+
             document.getElementById('videoWrap').style.display = 'block';
-            setStage('Detecting face');
-            setGuide('Hold still and center your face in the camera frame.');
-            setOverlay('Initializing face detection…');
+            setStage('Align your face');
+            setGuide('Place your face inside the mask. Once aligned, hold still for one second.');
+            setOverlay('Searching for one face inside the mask...');
+
             detectTimer = setInterval(() => detectionLoop(vid), DETECT_INTERVAL_MS);
-        } catch(e) {
-            btn.disabled = false;
-            setMsg('Camera access denied. Please allow camera and try again.');
+        } catch (e) {
+            startingCamera = false;
+            setStage('Waiting for camera');
+            setGuide('Camera access is required for face setup. The system will retry automatically.');
+            setOverlay('Camera unavailable');
+            setMsg('Camera access is not available right now. Retrying automatically...');
+            if (!retryTimer) {
+                retryTimer = setTimeout(() => {
+                    retryTimer = null;
+                    startCapture();
+                }, 3000);
+            }
         }
     }
 
     async function detectionLoop(vid) {
+        if (submitting || detecting) return;
+        detecting = true;
+
         const frameData = snapFrame(vid);
-        lastFrameData = frameData;
+        const mask = document.getElementById('faceMask');
+
         try {
             const { ok, data } = await detectFrame(frameData);
-
             if (!ok || !data.detected) {
+                resetHold();
+                mask.className = '';
+                setStage('Align your face');
+                setGuide('Center one face inside the mask and keep your head straight.');
                 setOverlay('No face detected');
-                setGuide('Make sure your full face is visible, with good light.');
                 return;
             }
 
-            if (!motionState.faceDetected) {
-                motionState.faceDetected = true;
-                markDone('check-face');
-                motionState.baseline = {
-                    center: data.center,
-                    ratio: data.face_ratio,
-                };
-                setStage('Motion checks');
-                setGuide('Great. Now follow prompts: look up, down, left, then right.');
+            if (!isFaceAligned(data)) {
+                resetHold();
+                mask.className = '';
+                setStage('Align your face');
+                setGuide('Move your face into the mask and keep only one face in frame.');
+                setOverlay('Face detected, but not aligned yet');
+                return;
             }
 
-            evaluateMotion(data);
-            refreshMotionPrompt();
+            if (holdStart === null) {
+                holdStart = Date.now();
+                mask.className = 'aligned';
+                setStage('Hold still');
+                setGuide('Great. Hold still for one second, then we will capture several photos.');
+            }
 
-            if (allChecksPassed()) {
+            const elapsed = Date.now() - holdStart;
+            const pct = Math.min(100, (elapsed / CAPTURE_DELAY_MS) * 100);
+            document.getElementById('progressFill').style.width = pct + '%';
+
+            if (elapsed >= CAPTURE_DELAY_MS) {
                 clearInterval(detectTimer);
                 detectTimer = null;
-                setStage('Ready to register');
-                setOverlay('Checks complete');
-                setGuide('Motion checks passed. Click Register Face Now.');
-                document.getElementById('enrollBtn').disabled = false;
-                document.getElementById('enrollBtn').style.display = 'block';
-                document.getElementById('startBtn').style.display = 'none';
+                mask.className = 'capturing';
+                setStage('Capturing photos');
+                setGuide('Please stay still while we capture a few photos for better accuracy.');
+                setOverlay(`Capturing photos... 0/${CAPTURE_FRAME_COUNT}`);
+                document.getElementById('progressFill').style.width = '0%';
+                await captureAndSubmit(vid);
+                return;
             }
-        } catch (e) {
+
+            const remainingMs = Math.max(0, CAPTURE_DELAY_MS - elapsed);
+            setOverlay(`Hold still... Capturing in ${(remainingMs / 1000).toFixed(1)}s`);
+        } catch (_) {
+            resetHold();
+            mask.className = '';
             setOverlay('Detection error');
             setMsg('Face detection check failed. Please try again.');
+        } finally {
+            detecting = false;
         }
     }
 
-    function evaluateMotion(data) {
-        if (!motionState.baseline || !data.center || !data.frame_size) return;
+    function isFaceAligned(data) {
+        if (!data.center || !data.frame_size || !data.face_ratio) return false;
+        if (data.face_count && data.face_count !== 1) return false;
 
         const [cx, cy] = data.center;
         const [fw, fh] = data.frame_size;
-        const [baseX, baseY] = motionState.baseline.center;
+        const faceRatio = Number(data.face_ratio);
 
-        const dxN = (cx - baseX) / Math.max(1, fw);
-        const dyN = (cy - baseY) / Math.max(1, fh);
+        const dx = Math.abs(cx - fw / 2) / fw;
+        const dy = Math.abs(cy - fh / 2) / fh;
 
-        // Thresholds tuned for normal phone/laptop webcam movement.
-        if (!motionState.up && dyN > 0.035) {
-            motionState.up = true;
-            markDone('check-up');
-        }
-        if (!motionState.down && dyN < -0.035) {
-            motionState.down = true;
-            markDone('check-down');
-        }
-        if (!motionState.left && dxN > 0.045) {
-            motionState.left = true;
-            markDone('check-left');
-        }
-        if (!motionState.right && dxN < -0.045) {
-            motionState.right = true;
-            markDone('check-right');
-        }
+        const centered = dx <= 0.10 && dy <= 0.13;
+        const goodSize = faceRatio >= 0.08 && faceRatio <= 0.30;
+
+        return centered && goodSize;
     }
 
-    function refreshMotionPrompt() {
-        if (!motionState.up) {
-            setOverlay('Please look up');
-            return;
-        }
-        if (!motionState.down) {
-            setOverlay('Please look down');
-            return;
-        }
-        if (!motionState.left) {
-            setOverlay('Please look left');
-            return;
-        }
-        if (!motionState.right) {
-            setOverlay('Please look right');
-            return;
-        }
-    }
-
-    function allChecksPassed() {
-        return motionState.faceDetected && motionState.up && motionState.down && motionState.left && motionState.right;
-    }
-
-    async function startEnrollment() {
-        if (!allChecksPassed()) {
-            setMsg('Complete all face checks first.');
-            return;
-        }
-
-        const vid = document.getElementById('faceVideo');
-        document.getElementById('enrollBtn').disabled = true;
-        captured = [];
-        capturing = true;
-        setStage('Capturing frames');
-        setGuide('Stay still and blink naturally while we capture secure face frames.');
-        setOverlay('Capturing… 0/' + TOTAL_FRAMES);
-
+    async function captureAndSubmit(vid) {
+        const frames = [];
         let attempts = 0;
-        while (captured.length < TOTAL_FRAMES && capturing && attempts < MAX_CAPTURE_ATTEMPTS) {
+
+        while (frames.length < CAPTURE_FRAME_COUNT && attempts < CAPTURE_MAX_ATTEMPTS) {
             attempts += 1;
-            const b64 = snapFrame(vid);
+            const frameData = snapFrame(vid);
             try {
-                const { ok, data } = await detectFrame(b64);
-                if (ok && data.detected) {
-                    captured.push(b64);
-                    setGuide('Great. Keep looking naturally at the camera while we capture.');
+                const { ok, data } = await detectFrame(frameData);
+                if (ok && data.detected && isFaceAligned(data)) {
+                    frames.push(frameData);
+                    const pct = (frames.length / CAPTURE_FRAME_COUNT) * 100;
+                    document.getElementById('progressFill').style.width = pct + '%';
+                    setOverlay(`Capturing photos... ${frames.length}/${CAPTURE_FRAME_COUNT}`);
                 } else {
-                    setGuide('Face temporarily lost. Re-center your face and hold still.');
+                    setOverlay(`Hold still inside the mask... ${frames.length}/${CAPTURE_FRAME_COUNT}`);
                 }
             } catch (_) {
-                // Ignore transient detection call errors; continue sampling.
+                setOverlay(`Capturing photos... ${frames.length}/${CAPTURE_FRAME_COUNT}`);
             }
-            const pct = Math.round((captured.length / TOTAL_FRAMES) * 100);
-            document.getElementById('progressFill').style.width = pct + '%';
-            setOverlay(`Capturing… ${captured.length}/${TOTAL_FRAMES}`);
-            await sleep(SAMPLE_INTERVAL_MS);
+
+            if (frames.length < CAPTURE_FRAME_COUNT) {
+                await sleep(CAPTURE_FRAME_GAP_MS);
+            }
         }
 
-        if (captured.length < Math.max(6, Math.floor(TOTAL_FRAMES * 0.6))) {
-            capturing = false;
-            setMsg('Face was not consistently visible during capture. Please try again with better light.');
-            document.getElementById('startBtn').disabled = false;
-            document.getElementById('startBtn').style.display = 'block';
-            document.getElementById('enrollBtn').disabled = true;
-            document.getElementById('enrollBtn').style.display = 'none';
-            setStage('Detection needed');
-            setOverlay('Capture not stable');
+        if (frames.length < CAPTURE_FRAME_COUNT) {
+            submitting = false;
+            resetHold();
+            document.getElementById('faceMask').className = '';
+            setStage('Align your face');
+            setGuide('We could not capture enough clear photos. Re-align your face and hold still again.');
+            setOverlay('Capture incomplete');
+            setMsg('Not enough clear face photos were captured. Please try again.');
+            resumeDetection();
             return;
         }
 
-        if (capturing) {
-            submitFrames();
+        await submitFrames(frames);
+    }
+
+    async function submitFrames(frameList) {
+        submitting = true;
+        try {
+            let res = await fetch('/api/face/enroll', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ images: frameList })
+            });
+
+            if (res.status === 401) {
+                const token = localStorage.getItem('sessionToken') || '';
+                if (token) {
+                    res = await fetch(`/api/face/enroll?token=${encodeURIComponent(token)}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ images: frameList })
+                    });
+                }
+            }
+
+            const data = await res.json();
+            if (data.success) {
+                stopStream();
+                document.getElementById('videoWrap').style.display = 'none';
+                document.getElementById('success').style.display = 'block';
+                setMsg('');
+                setTimeout(() => window.location.href = '/', 1600);
+                return;
+            }
+
+            submitting = false;
+            resetHold();
+            document.getElementById('faceMask').className = '';
+            setStage('Align your face');
+            setGuide('We could not save the captured photos. Re-align your face and hold still for one second.');
+            setOverlay(data.message || 'Could not save face photos');
+            setMsg(data.message || 'Could not detect a face. Please try again.');
+            resumeDetection();
+        } catch (_) {
+            submitting = false;
+            resetHold();
+            document.getElementById('faceMask').className = '';
+            setStage('Align your face');
+            setGuide('An error occurred. Re-align your face and hold still for one second.');
+            setOverlay('Save failed');
+            setMsg('Error saving face photos. Please try again.');
+            resumeDetection();
         }
+    }
+
+    function resumeDetection() {
+        if (!stream || detectTimer) return;
+        const vid = document.getElementById('faceVideo');
+        detectTimer = setInterval(() => detectionLoop(vid), DETECT_INTERVAL_MS);
+    }
+
+    function resetHold() {
+        holdStart = null;
+        document.getElementById('progressFill').style.width = '0%';
     }
 
     function snapFrame(vid) {
@@ -371,87 +433,46 @@
         return c.toDataURL('image/jpeg', 0.85);
     }
 
-    async function submitFrames() {
-        capturing = false;
-        setStage('Processing');
-        setOverlay('Processing…');
-        try {
-            const token = localStorage.getItem('sessionToken') || '';
-            const res = await fetch('/api/face/enroll', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({ images: captured })
-            });
-            if (res.status === 401 && token) {
-                const retry = await fetch(`/api/face/enroll?token=${encodeURIComponent(token)}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
-                    body: JSON.stringify({ images: captured })
-                });
-                const retryData = await retry.json();
-                if (retryData.success) {
-                    stopStream();
-                    document.getElementById('videoWrap').style.display = 'none';
-                    document.getElementById('success').style.display = 'block';
-                    setTimeout(() => window.location.href = '/', 1800);
-                } else {
-                    stopStream();
-                    document.getElementById('videoWrap').style.display = 'none';
-                    setMsg(retryData.message || 'Could not detect a face. Please try again.');
-                    document.getElementById('startBtn').disabled = false;
-                    document.getElementById('startBtn').style.display = 'block';
-                    document.getElementById('enrollBtn').style.display = 'none';
-                }
-                return;
-            }
-            const data = await res.json();
-            if (data.success) {
-                stopStream();
-                document.getElementById('videoWrap').style.display = 'none';
-                document.getElementById('success').style.display = 'block';
-                setTimeout(() => window.location.href = '/', 1800);
-            } else {
-                stopStream();
-                document.getElementById('videoWrap').style.display = 'none';
-                setMsg(data.message || 'Could not detect a face. Please try again.');
-                document.getElementById('startBtn').disabled = false;
-                document.getElementById('startBtn').style.display = 'block';
-                document.getElementById('enrollBtn').style.display = 'none';
-            }
-        } catch(e) {
-            stopStream();
-            setMsg('Error saving face. You can skip and set it up later.');
-            document.getElementById('startBtn').disabled = false;
-            document.getElementById('startBtn').style.display = 'block';
-            document.getElementById('enrollBtn').style.display = 'none';
-        }
+    function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
     }
 
     function stopStream() {
-        capturing = false;
         if (detectTimer) {
             clearInterval(detectTimer);
             detectTimer = null;
         }
-        if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
-    }
-
-    function skip() { window.location.href = '/'; }
-    function setStage(t) { document.getElementById('stagePill').textContent = 'Stage: ' + t; }
-    function setGuide(t) { document.getElementById('guideBox').textContent = t; }
-    function setMsg(t) { document.getElementById('msg').textContent = t; }
-    function setOverlay(t) { document.getElementById('overlayText').textContent = t; }
-    function markDone(id) {
-        const el = document.getElementById(id);
-        if (el && !el.classList.contains('done')) {
-            el.classList.add('done');
-            const dot = el.querySelector('.check-dot');
-            if (dot) dot.textContent = '✓';
+        if (retryTimer) {
+            clearTimeout(retryTimer);
+            retryTimer = null;
+        }
+        if (stream) {
+            stream.getTracks().forEach(t => t.stop());
+            stream = null;
         }
     }
-    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    function setStage(text) {
+        document.getElementById('stagePill').textContent = 'Stage: ' + text;
+    }
+
+    function setGuide(text) {
+        document.getElementById('guideBox').textContent = text;
+    }
+
+    function setOverlay(text) {
+        document.getElementById('overlayText').textContent = text;
+    }
+
+    function setMsg(text) {
+        document.getElementById('msg').textContent = text;
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', startCapture);
+    } else {
+        startCapture();
+    }
 </script>
 </body>
 </html>
