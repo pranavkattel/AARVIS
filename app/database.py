@@ -422,7 +422,7 @@ def get_user_by_username(username: str):
         cursor = conn.cursor()
         
         cursor.execute("""
-            SELECT id, username, email, full_name, location, interests
+            SELECT id, username, email, full_name, location, interests, google_id
             FROM users
             WHERE username = ?
         """, (username,))

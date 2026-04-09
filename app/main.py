@@ -12,7 +12,6 @@ import ipaddress
 import urllib.request
 import urllib.error
 import urllib.parse
-from pydantic import BaseModel
 from typing import Optional
 import secrets
 import cv2
@@ -38,7 +37,7 @@ except Exception:
     pass
 
 from app.database import (
-    create_user, verify_user, get_user_by_username, save_conversation, get_recent_context,
+    get_user_by_username, save_conversation, get_recent_context,
     create_google_user, get_user_by_google_id, get_user_google_tokens, update_google_tokens,
     get_all_users, delete_user_by_id, admin_update_user,
 )
@@ -333,20 +332,6 @@ def _create_local_session_from_google_claim(claim: dict, intent: str) -> dict:
         "redirect_pc": redirect_pc,
     }
 
-# Pydantic models for request validation
-class RegisterRequest(BaseModel):
-    username: str
-    email: str
-    password: str
-    full_name: str
-    location: str
-    interests: str = ""
-    face_embeddings: Optional[list] = None  # Face embeddings for registration
-
-class LoginRequest(BaseModel):
-    username: str
-    password: str
-
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request, session_token: Optional[str] = Cookie(None)):
     # Check if user is logged in
@@ -439,59 +424,19 @@ async def admin_update_user_route(user_id: int, request: Request):
     return {"ok": True}
 
 @app.post("/api/register")
-async def register(user: RegisterRequest, response: Response):
-    try:
-        user_id = create_user(
-            username=user.username,
-            email=user.email,
-            password=user.password,
-            full_name=user.full_name,
-            location=user.location,
-            interests=user.interests
-        )
-        
-        # Save face embeddings if provided
-        if user.face_embeddings and FACE_RECOGNITION_AVAILABLE:
-            face_users_db[user.username] = user.face_embeddings
-            save_face_database(face_users_db)
-            print(f"[DEBUG] Saved {len(user.face_embeddings)} face embeddings for {user.username}")
-        
-        # Create session
-        token = _issue_session_token(user.username)
-        
-        # Set cookie in response
-        _set_session_cookie(response, token)
-        
-        return {
-            "message": "User created successfully",
-            "token": token,
-            "username": user.username
-        }
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        print(f"[DEBUG] Registration error: {e}")
-        raise HTTPException(status_code=500, detail="Registration failed")
+async def register_disabled():
+    raise HTTPException(
+        status_code=410,
+        detail="Manual registration has been removed. Use Google Sign-In to create an account.",
+    )
+
 
 @app.post("/api/login")
-async def login(credentials: LoginRequest, response: Response):
-    user = verify_user(credentials.username, credentials.password)
-    
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid username or password")
-    
-    # Create session
-    token = _issue_session_token(credentials.username)
-    
-    # Set cookie in response
-    _set_session_cookie(response, token)
-    
-    return {
-        "message": "Login successful",
-        "token": token,
-        "username": user['username'],
-        "full_name": user['full_name']
-    }
+async def login_disabled():
+    raise HTTPException(
+        status_code=410,
+        detail="Manual login has been removed. Use Google Sign-In or face login instead.",
+    )
 
 @app.post("/api/logout")
 async def logout(session_token: Optional[str] = Cookie(None)):
@@ -796,6 +741,9 @@ async def verify_face(request: Request):
         best_similarity = 0
         
         for username, embeddings in face_users_db.items():
+            matched_user = get_user_by_username(username)
+            if not matched_user or not matched_user.get("google_id"):
+                continue
             similarities = [np.dot(emb, test_emb) for emb in embeddings]
             avg_similarity = np.mean(similarities)
             
@@ -915,6 +863,9 @@ async def face_login(request: Request, response: Response):
         for username, embeddings in face_users_db.items():
             if not embeddings:
                 continue
+            matched_user = get_user_by_username(username)
+            if not matched_user or not matched_user.get("google_id"):
+                continue
             similarities = [np.dot(emb, test_emb) for emb in embeddings]
             avg_similarity = np.mean(similarities)
             
@@ -929,6 +880,11 @@ async def face_login(request: Request, response: Response):
             
             if not user:
                 return {"success": False, "message": "User not found in database"}
+            if not user.get("google_id"):
+                return {
+                    "success": False,
+                    "message": "This face profile is not linked to Google Sign-In. Please sign in with Google first."
+                }
             
             # Create session (same as normal login)
             token = _issue_session_token(best_match)

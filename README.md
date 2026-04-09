@@ -1,6 +1,8 @@
-﻿# Final Fixed FYP
+# Final Fixed FYP
 
 Organized FastAPI version of the smart mirror project.
+
+Authentication is Google OAuth-based. Manual username/password registration and login are disabled.
 
 ## Structure
 - `app/` application code

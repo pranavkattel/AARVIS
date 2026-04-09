@@ -79,28 +79,6 @@
             transition: background .2s;
         }
         .btn-google-small:hover { background: rgba(255,255,255,.18); }
-        .toggle-pw {
-            background: none; border: none; color: rgba(255,255,255,.5);
-            font-size: 12px; cursor: pointer; text-decoration: underline;
-        }
-        .pw-form {
-            display: none; background: rgba(0,0,0,.55); border-radius: 10px;
-            padding: 14px 16px; width: 100%; max-width: 320px;
-        }
-        .pw-form input {
-            width: 100%; padding: 9px 12px; margin-bottom: 8px;
-            background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2);
-            border-radius: 7px; color: #fff; font-size: 13px;
-        }
-        .pw-form input::placeholder { color: rgba(255,255,255,.4); }
-        .pw-form input:focus { outline: none; border-color: #667eea; }
-        .pw-btn {
-            width: 100%; padding: 9px;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: #fff; border: none; border-radius: 7px;
-            font-size: 13px; font-weight: 600; cursor: pointer;
-        }
-        .pw-err { color: #ff6e6e; font-size: 12px; margin-top: 4px; display: none; }
         .footer-tip {
             font-size: 12px; color: rgba(255,255,255,.3);
         }
@@ -167,23 +145,16 @@
                         </svg>
                         Sign in with Google
                     </a>
-                    <button class="toggle-pw" onclick="togglePW(this)">Username &amp; password</button>
                 </div>
-                <div class="pw-form" id="pwForm">
-                    <input type="text" id="username" placeholder="Username">
-                    <input type="password" id="password" placeholder="Password">
-                    <div class="pw-err" id="pwErr"></div>
-                    <button class="pw-btn" onclick="handlePWLogin(event)">Sign In</button>
-                </div>
-                <div class="footer-tip">New user? <a href="/register">Register here</a></div>
+                <div class="footer-tip">New user? <a href="/register">Start with Google on the register page</a></div>
             </div>
         </div>
     </div>
 
     <!-- QR panel -->
     <div class="qr-panel">
-        <div class="title">&#128242; Register from phone</div>
-        <div class="sub">Same Wi-Fi — scan to sign up or sign in on your phone</div>
+        <div class="title">Sign in from phone</div>
+        <div class="sub">Same Wi-Fi — scan to continue Google sign-in on your phone</div>
         <div id="qrcode"></div>
         <div class="qr-url" id="qrUrl"></div>
         <div class="pair-ok" id="pairOk">&#10003; Phone connected!<br>Loading…</div>
@@ -203,7 +174,7 @@
                 await vid.play();
                 faceInterval = setInterval(doFaceCheck, 2000);
             } catch (e) {
-                setStatus('Camera unavailable — use Google or password below', 'error');
+                setStatus('Camera unavailable — use Google sign-in instead', 'error');
             }
         }
 
@@ -237,32 +208,6 @@
                     setStatus(data.message || 'Looking for your face…');
                 }
             } catch (e) { /* silently retry */ }
-        }
-
-        // ── Password fallback ───────────────────────────────────────────
-        function togglePW(btn) {
-            const f = document.getElementById('pwForm');
-            const show = f.style.display !== 'block';
-            f.style.display = show ? 'block' : 'none';
-            btn.textContent = show ? 'Hide' : 'Username & password';
-        }
-
-        async function handlePWLogin(event) {
-            event.preventDefault();
-            const err = document.getElementById('pwErr');
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
-            if (!username || !password) { err.textContent = 'Enter username and password.'; err.style.display = 'block'; return; }
-            err.style.display = 'none';
-            try {
-                const res = await fetch('/api/login', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-                    body: JSON.stringify({ username, password })
-                });
-                const data = await res.json();
-                if (res.ok) { localStorage.setItem('sessionToken', data.token); window.location.href = '/'; }
-                else { err.textContent = data.detail || 'Login failed.'; err.style.display = 'block'; }
-            } catch (e) { err.textContent = 'Connection error.'; err.style.display = 'block'; }
         }
 
         // ── QR + pairing ────────────────────────────────────────────────
