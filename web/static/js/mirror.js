@@ -3,14 +3,6 @@ console.log('[DEBUG] Mirror.js loaded!');
 let ws = null;
 let isConnected = false;
 let currentUser = null;
-let faceVerified = false;
-let faceCheckInterval = null;
-let videoStream = null;
-let videoElement = null;
-
-// Face verification state
-const FACE_CHECK_INTERVAL = 240000; // 4 minutes in milliseconds
-const INITIAL_CHECK_DELAY = 5000; // 5 seconds initial delay
 let voiceServicesReady = false;
 let voiceWarmPromise = null;
 
@@ -1072,9 +1064,6 @@ async function init() {
         }
     }
     
-    // Initialize face verification
-    initFaceVerification();
-    
     console.log('[DEBUG] Initializing API fetches...');
     setTimeout(() => {
         console.log('[DEBUG] Fetching weather...');
@@ -1095,120 +1084,9 @@ async function init() {
     console.log('[DEBUG] Periodic updates scheduled');
 }
 
-// Face Verification Functions
-async function initFaceVerification() {
-    console.log('[DEBUG] Initializing face verification...');
-    
-    // Check if user was recently detected (cache check)
-    try {
-        const cacheResponse = await fetch('/api/face/check-cache', {
-            credentials: 'include'
-        });
-        const cacheData = await cacheResponse.json();
-        
-        if (cacheData.cached) {
-            console.log(`[DEBUG] User detected in cache: ${cacheData.username}`);
-            faceVerified = true;
-            showPersonalizedContent();
-            
-            // Schedule next check based on remaining time
-            const nextCheck = Math.max(cacheData.seconds_remaining * 1000, 30000);
-            setTimeout(performFaceCheck, nextCheck);
-            return;
-        }
-    } catch (error) {
-        console.log('[DEBUG] Cache check failed:', error);
-    }
-    
-    // No cache, start face verification after initial delay
-    setTimeout(performFaceCheck, INITIAL_CHECK_DELAY);
-}
-
-async function performFaceCheck() {
-    console.log('[DEBUG] Performing face verification check...');
-    
-    try {
-        // Create hidden video element for face capture
-        if (!videoElement) {
-            videoElement = document.createElement('video');
-            videoElement.width = 640;
-            videoElement.height = 480;
-            videoElement.style.display = 'none';
-            document.body.appendChild(videoElement);
-        }
-        
-        // Get camera access
-        if (!videoStream) {
-            videoStream = await navigator.mediaDevices.getUserMedia({ 
-                video: { width: 640, height: 480 } 
-            });
-            videoElement.srcObject = videoStream;
-            await videoElement.play();
-        }
-        
-        // Wait a moment for camera to stabilize
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Capture frame
-        const canvas = document.createElement('canvas');
-        canvas.width = 640;
-        canvas.height = 480;
-        canvas.getContext('2d').drawImage(videoElement, 0, 0, 640, 480);
-        const imageData = canvas.toDataURL('image/jpeg', 0.7);
-        
-        // Send for verification
-        const response = await fetch('/api/face/verify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ image: imageData })
-        });
-        
-        const data = await response.json();
-        
-        if (data.detected) {
-            console.log(`[DEBUG] Face verified: ${data.username} (${data.confidence}% confidence)`);
-            faceVerified = true;
-            showPersonalizedContent();
-            
-            // Schedule next check after cache duration
-            setTimeout(performFaceCheck, FACE_CHECK_INTERVAL);
-        } else {
-            console.log('[DEBUG] No face detected or unknown user');
-            faceVerified = false;
-            hidePersonalizedContent();
-            
-            // Retry sooner if no face detected
-            setTimeout(performFaceCheck, 30000); // Check again in 30 seconds
-        }
-        
-    } catch (error) {
-        console.error('[DEBUG] Face verification error:', error);
-        // Retry after error
-        setTimeout(performFaceCheck, 60000); // Check again in 1 minute
-    }
-}
-
-function showPersonalizedContent() {
-    console.log('[DEBUG] Showing personalized content');
-    
-    // Trigger data fetches
-    fetchWeather();
-    fetchNews();
-    fetchCalendar();
-    
-    // Show UI elements (they might be hidden by default)
-    const weatherWidget = document.getElementById('weatherWidget');
-    const newsWidget = document.getElementById('newsWidget');
-    const timelineContainer = document.getElementById('timelineContainer');
-    
-    if (weatherWidget) weatherWidget.style.opacity = '1';
-    if (newsWidget) newsWidget.style.opacity = '1';
-    if (timelineContainer) timelineContainer.style.opacity = '1';
-}
-
 function hidePersonalizedContent() {
     console.log('[DEBUG] Hiding personalized content');
+    return;
     
     // Optionally fade out or hide personal content
     const weatherWidget = document.getElementById('weatherWidget');
@@ -1220,7 +1098,7 @@ function hidePersonalizedContent() {
         document.getElementById('weatherTemp').textContent = '--°C';
     }
     if (newsWidget) {
-        newsWidget.innerHTML = '<div class="news-header">Latest News</div><div class="news-item"><div class="news-title">Please stand in front of mirror</div></div>';
+        newsWidget.innerHTML = '<div class="news-header">Latest News</div><div class="news-item"><div class="news-title">Loading news...</div></div>';
     }
 }
 

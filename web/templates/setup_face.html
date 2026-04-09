@@ -206,7 +206,7 @@
         startingCamera = true;
         setMsg('');
         setStage('Starting camera');
-        setGuide('Opening the camera automatically. Please stand in front of the mirror.');
+        setGuide('Opening the camera automatically. Center your face inside the mask.');
         setOverlay('Starting camera...');
         try {
             stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });

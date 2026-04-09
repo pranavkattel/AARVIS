@@ -397,7 +397,7 @@ def _b64url_decode(raw: str) -> bytes:
 
 
 def _issue_session_token(username: str) -> str:
-    # Prefix helps distinguish signed stateless session tokens from old random tokens.
+    # Tokens stay server-owned so an application restart clears every active session.
     payload = json.dumps({"u": username, "iat": int(time.time())}, separators=(",", ":")).encode("utf-8")
     payload_b64 = _b64url_encode(payload)
     sig = hmac.new(SESSION_SIGNING_SECRET.encode("utf-8"), payload_b64.encode("utf-8"), hashlib.sha256).digest()
@@ -409,35 +409,7 @@ def _issue_session_token(username: str) -> str:
 def _resolve_session_user(token: Optional[str]) -> Optional[str]:
     if not token:
         return None
-
-    user = sessions.get(token)
-    if user:
-        return user
-
-    if not token.startswith("s1."):
-        return None
-
-    try:
-        _, payload_b64, sig_b64 = token.split(".", 2)
-        expected_sig = hmac.new(
-            SESSION_SIGNING_SECRET.encode("utf-8"),
-            payload_b64.encode("utf-8"),
-            hashlib.sha256,
-        ).digest()
-        actual_sig = _b64url_decode(sig_b64)
-        if not hmac.compare_digest(expected_sig, actual_sig):
-            return None
-
-        payload = json.loads(_b64url_decode(payload_b64).decode("utf-8"))
-        username = payload.get("u")
-        issued = int(payload.get("iat", 0))
-        if not username or issued <= 0:
-            return None
-        if int(time.time()) - issued > SESSION_TTL_SECONDS:
-            return None
-        return username
-    except Exception:
-        return None
+    return sessions.get(token)
 
 
 def _set_session_cookie(response: Response, token: str) -> None:
@@ -577,7 +549,9 @@ async def home(
 ):
     auth_token = token or session_token
     if not _resolve_session_user(auth_token):
-        return RedirectResponse(url="/login", status_code=302)
+        redirect = RedirectResponse(url="/login", status_code=302)
+        redirect.delete_cookie(key="session_token", path="/")
+        return redirect
 
     if token and token != session_token:
         redirect = RedirectResponse(url="/", status_code=302)
@@ -628,7 +602,9 @@ async def setup_face_page(
 ):
     auth_token = token or session_token
     if not _resolve_session_user(auth_token):
-        return RedirectResponse(url="/login", status_code=302)
+        redirect = RedirectResponse(url="/login", status_code=302)
+        redirect.delete_cookie(key="session_token", path="/")
+        return redirect
 
     response = templates.TemplateResponse("setup_face.html", {"request": request})
     if token and token != session_token:
@@ -696,9 +672,10 @@ async def login_disabled():
     )
 
 @app.post("/api/logout")
-async def logout(session_token: Optional[str] = Cookie(None)):
+async def logout(response: Response, session_token: Optional[str] = Cookie(None)):
     if session_token and session_token in sessions:
         del sessions[session_token]
+    response.delete_cookie(key="session_token", path="/")
     return {"message": "Logged out successfully"}
 
 

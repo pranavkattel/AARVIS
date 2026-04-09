@@ -130,6 +130,8 @@
             }
         })();
 
+        localStorage.removeItem('sessionToken');
+
         const PAIR_TOKEN = '{{ pair_token }}';
         const QR_URL = '{{ qr_url or "" }}';
         let pairPollInterval = null;
