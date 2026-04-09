@@ -202,8 +202,9 @@
                     clearInterval(faceInterval);
                     if (faceStream) faceStream.getTracks().forEach(t => t.stop());
                     localStorage.setItem('sessionToken', data.token);
+                    const redirectUrl = data.redirect_url || (data.token ? `/?token=${encodeURIComponent(data.token)}` : '/');
                     setStatus('Welcome back, ' + data.username + '! ✓', 'matched');
-                    setTimeout(() => window.location.href = '/', 900);
+                    setTimeout(() => window.location.href = redirectUrl, 900);
                 } else {
                     setStatus(data.message || 'Looking for your face…');
                 }
@@ -263,6 +264,9 @@
                     }
                     document.getElementById('pairOk').textContent = '\u2713 Google sign-in completed on phone.';
                     document.getElementById('pairOk').style.display = 'block';
+                    setTimeout(() => {
+                        window.location.href = data.dest || '/';
+                    }, 700);
                 }
             } catch(e) {}
         }

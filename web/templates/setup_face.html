@@ -384,11 +384,16 @@
 
             const data = await res.json();
             if (data.success) {
+                if (data.session_token) {
+                    localStorage.setItem('sessionToken', data.session_token);
+                }
+                const fallbackToken = data.session_token || localStorage.getItem('sessionToken') || '';
+                const redirectUrl = data.redirect_url || (fallbackToken ? `/?token=${encodeURIComponent(fallbackToken)}` : '/');
                 stopStream();
                 document.getElementById('videoWrap').style.display = 'none';
                 document.getElementById('success').style.display = 'block';
                 setMsg('');
-                setTimeout(() => window.location.href = '/', 1600);
+                setTimeout(() => window.location.href = redirectUrl, 900);
                 return;
             }
 

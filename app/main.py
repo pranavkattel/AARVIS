@@ -28,6 +28,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 WEB_DIR = PROJECT_ROOT / "web"
 DATA_DIR = PROJECT_ROOT / "data"
 MODELS_DIR = PROJECT_ROOT / "models"
+WORKSPACE_ROOT = PROJECT_ROOT.parent
 
 try:
     from dotenv import load_dotenv
@@ -91,6 +92,7 @@ except Exception as e:
 # Initialize face recognition (InsightFace for detection)
 try:
     from insightface.app import FaceAnalysis
+    from insightface.utils import face_align
     print("[DEBUG] Initializing InsightFace...")
     face_app = FaceAnalysis(name='buffalo_sc', providers=['CPUExecutionProvider'])
     face_app.prepare(ctx_id=-1, det_size=(640, 640))
@@ -99,6 +101,20 @@ try:
 except Exception as e:
     FACE_RECOGNITION_AVAILABLE = False
     face_app = None
+    face_align = None
+    print(f"[DEBUG] Face recognition not available: {e}")
+
+FACE_MATCH_THRESHOLD = float(os.getenv("FACE_MATCH_THRESHOLD", "0.40"))
+ACTIVE_FACE_MODEL_NAME = "insightface_default"
+ACTIVE_FACE_MODEL_PATH = ""
+
+
+def _normalize_embedding_vector(embedding):
+    vec = np.asarray(embedding, dtype=np.float32)
+    norm = np.linalg.norm(vec)
+    if norm <= 0:
+        return vec
+    return vec / norm
     print(f"[DEBUG] ❌ Face recognition not available: {e}")
 
 # ── Custom Face Model ────────────────────────────────────────────────────────
@@ -109,22 +125,130 @@ try:
     from app.ml.face_model import FaceEmbeddingModel
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print("[DEBUG] Activating Custom Nepali Face Backbone...")
-    
-    custom_face_model = FaceEmbeddingModel(embedding_size=512).to(device)
-    custom_face_model.load_state_dict(torch.load(MODELS_DIR / "face_embedding_backbone.pth", map_location=device))
-    custom_face_model.eval()
-    
+    print("[DEBUG] Activating best available face backbone...")
+
     custom_face_transform = transforms.Compose([
         transforms.Resize((112, 112)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.5,0.5,0.5], std=[0.5,0.5,0.5]),
     ])
+
+    def _iter_face_model_candidates():
+        candidate_names = [
+            "best_acc_model.pth",
+            "best_face_model.pth",
+            "face_embedding_backbone.pth",
+            "best_nepali_face_model.pth",
+            "best face ko.pth",
+        ]
+        search_dirs = [MODELS_DIR, PROJECT_ROOT, WORKSPACE_ROOT]
+        seen = set()
+        for name in candidate_names:
+            for directory in search_dirs:
+                candidate = directory / name
+                if candidate.exists() and candidate not in seen:
+                    seen.add(candidate)
+                    yield candidate
+
+    def _torch_load_checkpoint(path: Path):
+        try:
+            return torch.load(path, map_location=device, weights_only=False)
+        except TypeError:
+            return torch.load(path, map_location=device)
+
+    def _extract_runtime_face_state_dict(checkpoint):
+        if isinstance(checkpoint, dict) and isinstance(checkpoint.get("model_state_dict"), dict):
+            checkpoint = checkpoint["model_state_dict"]
+        if not isinstance(checkpoint, dict):
+            raise ValueError("checkpoint does not contain a state dict")
+
+        translated = {}
+        for key, value in checkpoint.items():
+            new_key = None
+            if key.startswith("backbone.backbone."):
+                new_key = key[len("backbone."):]
+            elif key.startswith("backbone.projection."):
+                new_key = key[len("backbone."):]
+            elif key.startswith("backbone.pool."):
+                new_key = key[len("backbone."):]
+            elif key.startswith("backbone.features."):
+                new_key = "backbone." + key[len("backbone.features."):]
+            elif key.startswith("backbone."):
+                new_key = key
+            elif key.startswith("projection.") or key.startswith("pool."):
+                new_key = key
+            if new_key:
+                translated[new_key] = value
+        if not translated:
+            raise ValueError("checkpoint does not match FaceEmbeddingModel")
+        return translated
+
+    def _load_best_face_model():
+        candidate_paths = list(_iter_face_model_candidates())
+        if not candidate_paths:
+            raise FileNotFoundError("no face model checkpoints were found")
+
+        for candidate in candidate_paths:
+            try:
+                checkpoint = _torch_load_checkpoint(candidate)
+                state_dict = _extract_runtime_face_state_dict(checkpoint)
+                model = FaceEmbeddingModel(embedding_size=512).to(device)
+                model_keys = set(model.state_dict().keys())
+                matched_keys = model_keys.intersection(state_dict.keys())
+                coverage = len(matched_keys) / max(1, len(model_keys))
+                if coverage < 0.85:
+                    raise ValueError(f"insufficient key coverage ({coverage:.0%})")
+
+                missing, unexpected = model.load_state_dict(state_dict, strict=False)
+                required_missing = [key for key in missing if not key.endswith("num_batches_tracked")]
+                if required_missing:
+                    raise ValueError(f"missing runtime weights: {required_missing[:5]}")
+                if unexpected:
+                    raise ValueError(f"unexpected weights: {unexpected[:5]}")
+
+                model.eval()
+
+                meta_bits = []
+                if isinstance(checkpoint, dict) and checkpoint.get("val_acc") is not None:
+                    meta_bits.append(f"val_acc={float(checkpoint['val_acc']):.4f}")
+                if isinstance(checkpoint, dict) and checkpoint.get("val_loss") is not None:
+                    meta_bits.append(f"val_loss={float(checkpoint['val_loss']):.4f}")
+                meta_suffix = f" ({', '.join(meta_bits)})" if meta_bits else ""
+                print(f"[DEBUG] Loaded face model: {candidate}{meta_suffix}")
+                return model, candidate
+            except Exception as exc:
+                print(f"[DEBUG] Skipping face model {candidate}: {exc}")
+
+        raise RuntimeError("no compatible face model checkpoints could be loaded")
+
+    custom_face_model, selected_face_model_path = _load_best_face_model()
+    ACTIVE_FACE_MODEL_NAME = selected_face_model_path.name
+    ACTIVE_FACE_MODEL_PATH = str(selected_face_model_path)
+    print(f"[DEBUG] Active custom face model: {ACTIVE_FACE_MODEL_NAME}")
     USE_CUSTOM_FACE_MODEL = True
     print("[DEBUG] ✅ Custom Face Model Loaded Successfully!")
 except Exception as e:
     print(f"[DEBUG] ⚠️ Custom face model failed to load (will fallback to InsightFace): {e}")
+    custom_face_model = None
     USE_CUSTOM_FACE_MODEL = False
+
+def _extract_face_crop(frame, face):
+    if face_align is not None and getattr(face, "kps", None) is not None:
+        try:
+            aligned = face_align.norm_crop(frame, landmark=face.kps, image_size=112)
+            if aligned is not None and getattr(aligned, "size", 0):
+                return aligned
+        except Exception as exc:
+            print(f"[DEBUG] Face alignment fallback: {exc}")
+
+    x1, y1, x2, y2 = face.bbox.astype(int)
+    h, w = frame.shape[:2]
+    x1, y1 = max(0, x1), max(0, y1)
+    x2, y2 = min(w, x2), min(h, y2)
+    if x2 <= x1 or y2 <= y1:
+        raise ValueError("invalid face crop bounds")
+    return frame[y1:y2, x1:x2]
+
 
 def get_face_embedding(frame, face):
     """
@@ -134,25 +258,74 @@ def get_face_embedding(frame, face):
     """
     if USE_CUSTOM_FACE_MODEL:
         try:
-            x1, y1, x2, y2 = face.bbox.astype(int)
-            h, w = frame.shape[:2]
-            x1, y1 = max(0, x1), max(0, y1)
-            x2, y2 = min(w, x2), min(h, y2)
-            
-            face_crop = frame[y1:y2, x1:x2]
+            face_crop = _extract_face_crop(frame, face)
             face_pil = Image.fromarray(cv2.cvtColor(face_crop, cv2.COLOR_BGR2RGB))
             
             img_t = custom_face_transform(face_pil).unsqueeze(0).to(device)
             with torch.no_grad():
-                # Our backbone already outputs L2-normalized vectors
                 emb = custom_face_model(img_t).cpu().numpy().squeeze()
-            return emb
+            return _normalize_embedding_vector(emb)
         except Exception as exc:
             print(f"[DEBUG] Custom face extraction error {exc}, falling back.")
             pass
             
     # Fallback to default InsightFace L2-normalized embedding
-    return face.embedding / np.linalg.norm(face.embedding)
+    return _normalize_embedding_vector(face.embedding)
+
+
+def _prepare_enrollment_embeddings(embeddings):
+    cleaned = [_normalize_embedding_vector(emb) for emb in embeddings if emb is not None]
+    if len(cleaned) <= 2:
+        return cleaned
+
+    centroid = _normalize_embedding_vector(np.mean(cleaned, axis=0))
+    ranked = sorted(
+        ((float(np.dot(emb, centroid)), emb) for emb in cleaned),
+        key=lambda item: item[0],
+        reverse=True,
+    )
+
+    keep = [emb for score, emb in ranked if score >= 0.45]
+    if len(keep) < min(3, len(ranked)):
+        keep = [emb for _, emb in ranked[:min(5, len(ranked))]]
+    return keep[:8]
+
+
+def _score_enrolled_embeddings(test_emb, embeddings):
+    cleaned = [_normalize_embedding_vector(emb) for emb in embeddings if emb is not None]
+    if not cleaned:
+        return 0.0
+
+    test_emb = _normalize_embedding_vector(test_emb)
+    emb_matrix = np.stack(cleaned, axis=0)
+    similarities = emb_matrix @ test_emb
+    centroid = _normalize_embedding_vector(np.mean(emb_matrix, axis=0))
+    centroid_similarity = float(np.dot(centroid, test_emb))
+    top_k = similarities[np.argsort(similarities)[-min(3, len(similarities)):]]
+    top_k_mean = float(np.mean(top_k))
+    best_similarity = float(np.max(similarities))
+
+    # Blend the user's centroid with the strongest captured frames.
+    return (0.5 * centroid_similarity) + (0.35 * top_k_mean) + (0.15 * best_similarity)
+
+
+def _find_best_face_match(test_emb):
+    best_match = None
+    best_similarity = 0.0
+
+    for username, embeddings in face_users_db.items():
+        if not embeddings:
+            continue
+        matched_user = get_user_by_username(username)
+        if not matched_user or not matched_user.get("google_id"):
+            continue
+
+        similarity = _score_enrolled_embeddings(test_emb, embeddings)
+        if similarity > best_similarity:
+            best_similarity = similarity
+            best_match = username
+
+    return best_match, best_similarity
 
 # Face database
 FACE_DB_FILE = DATA_DIR / "face_database.pkl"
@@ -333,11 +506,20 @@ def _create_local_session_from_google_claim(claim: dict, intent: str) -> dict:
     }
 
 @app.get("/", response_class=HTMLResponse)
-async def home(request: Request, session_token: Optional[str] = Cookie(None)):
-    # Check if user is logged in
-    if not _resolve_session_user(session_token):
+async def home(
+    request: Request,
+    session_token: Optional[str] = Cookie(None),
+    token: Optional[str] = None,
+):
+    auth_token = token or session_token
+    if not _resolve_session_user(auth_token):
         return RedirectResponse(url="/login", status_code=302)
-    
+
+    if token and token != session_token:
+        redirect = RedirectResponse(url="/", status_code=302)
+        _set_session_cookie(redirect, token)
+        return redirect
+
     return templates.TemplateResponse("index.html", {"request": request})
 
 @app.get("/login", response_class=HTMLResponse)
@@ -375,8 +557,19 @@ async def register_page(request: Request):
     return templates.TemplateResponse("register.html", {"request": request, "pair_token": pair_token, "qr_url": qr_url})
 
 @app.get("/setup-face", response_class=HTMLResponse)
-async def setup_face_page(request: Request, session_token: Optional[str] = Cookie(None)):
-    return templates.TemplateResponse("setup_face.html", {"request": request})
+async def setup_face_page(
+    request: Request,
+    session_token: Optional[str] = Cookie(None),
+    token: Optional[str] = None,
+):
+    auth_token = token or session_token
+    if not _resolve_session_user(auth_token):
+        return RedirectResponse(url="/login", status_code=302)
+
+    response = templates.TemplateResponse("setup_face.html", {"request": request})
+    if token and token != session_token:
+        _set_session_cookie(response, token)
+    return response
 
 
 # ── Admin routes ──────────────────────────────────────────────────────────────
@@ -736,23 +929,9 @@ async def verify_face(request: Request):
         # Get face embedding using custom backbone or fallback
         test_emb = get_face_embedding(frame, faces[0])
         
-        # Check against all registered users
-        best_match = None
-        best_similarity = 0
-        
-        for username, embeddings in face_users_db.items():
-            matched_user = get_user_by_username(username)
-            if not matched_user or not matched_user.get("google_id"):
-                continue
-            similarities = [np.dot(emb, test_emb) for emb in embeddings]
-            avg_similarity = np.mean(similarities)
-            
-            if avg_similarity > best_similarity:
-                best_similarity = avg_similarity
-                best_match = username
-        
-        # Threshold for face recognition (40% similarity)
-        if best_similarity > 0.4:
+        best_match, best_similarity = _find_best_face_match(test_emb)
+
+        if best_match and best_similarity >= FACE_MATCH_THRESHOLD:
             # Update detection cache
             face_detection_cache[best_match] = datetime.now()
             
@@ -856,25 +1035,9 @@ async def face_login(request: Request, response: Response):
         # Get face embedding using custom model or fallback
         test_emb = get_face_embedding(frame, faces[0])
         
-        # Check against all registered users
-        best_match = None
-        best_similarity = 0
-        
-        for username, embeddings in face_users_db.items():
-            if not embeddings:
-                continue
-            matched_user = get_user_by_username(username)
-            if not matched_user or not matched_user.get("google_id"):
-                continue
-            similarities = [np.dot(emb, test_emb) for emb in embeddings]
-            avg_similarity = np.mean(similarities)
-            
-            if avg_similarity > best_similarity:
-                best_similarity = avg_similarity
-                best_match = username
-        
-        # Threshold for face recognition (40% similarity)
-        if best_similarity > 0.4:
+        best_match, best_similarity = _find_best_face_match(test_emb)
+
+        if best_match and best_similarity >= FACE_MATCH_THRESHOLD:
             # Get user from database
             user = get_user_by_username(best_match)
             
@@ -900,6 +1063,8 @@ async def face_login(request: Request, response: Response):
             return {
                 "success": True,
                 "token": token,
+                "redirect_url": f"/?token={urllib.parse.quote(token, safe='')}",
+                "model": ACTIVE_FACE_MODEL_NAME,
                 "username": user['username'],
                 "full_name": user['full_name'],
                 "confidence": round(float(best_similarity) * 100, 1),
@@ -953,12 +1118,22 @@ async def face_enroll(
     if not embeddings:
         return {"success": False, "message": "No face detected in provided images"}
 
+    embeddings = _prepare_enrollment_embeddings(embeddings)
+    if not embeddings:
+        return {"success": False, "message": "Captured photos were too inconsistent. Please try again."}
+
     face_users_db[username] = embeddings
     save_face_database(face_users_db)
     # Ensure browser gets an authenticated cookie even when auth came via token query param.
     _set_session_cookie(response, auth_token)
     print(f"[DEBUG] Enrolled {len(embeddings)} face embeddings for {username}")
-    return {"success": True, "embeddings_saved": len(embeddings)}
+    return {
+        "success": True,
+        "embeddings_saved": len(embeddings),
+        "session_token": auth_token,
+        "redirect_url": f"/?token={urllib.parse.quote(auth_token, safe='')}",
+        "model": ACTIVE_FACE_MODEL_NAME,
+    }
 
 @app.get("/api/face/check-cache")
 async def check_face_cache(session_token: Optional[str] = Cookie(None)):
