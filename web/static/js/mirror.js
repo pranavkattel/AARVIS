@@ -11,6 +11,8 @@ let videoElement = null;
 // Face verification state
 const FACE_CHECK_INTERVAL = 240000; // 4 minutes in milliseconds
 const INITIAL_CHECK_DELAY = 5000; // 5 seconds initial delay
+let voiceServicesReady = false;
+let voiceWarmPromise = null;
 
 // Check authentication on load
 async function checkAuth() {
@@ -56,34 +58,94 @@ async function checkAuth() {
 }
 
 function connectWebSocket() {
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const sessionToken = localStorage.getItem('sessionToken');
-    const tokenQuery = sessionToken ? `?token=${encodeURIComponent(sessionToken)}` : '';
-    const wsUrl = `${wsProtocol}//${window.location.host}/ws${tokenQuery}`;
-    ws = new WebSocket(wsUrl);
-    
-    ws.onopen = () => {
-        console.log('WebSocket connected:', wsUrl);
-        isConnected = true;
-        updateStatus('Ready', 'ready');
-    };
-    
-    ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        handleMessage(data);
-    };
-    
-    ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        updateStatus('Connection Error', 'error');
-    };
-    
-    ws.onclose = () => {
-        console.log('WebSocket disconnected');
-        isConnected = false;
-        updateStatus('Disconnected', 'error');
-        setTimeout(connectWebSocket, 3000);
-    };
+    if (isConnected && ws && ws.readyState === WebSocket.OPEN) {
+        return Promise.resolve(true);
+    }
+
+    return new Promise((resolve) => {
+        let settled = false;
+        const finish = (value) => {
+            if (!settled) {
+                settled = true;
+                resolve(value);
+            }
+        };
+
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const sessionToken = localStorage.getItem('sessionToken');
+        const tokenQuery = sessionToken ? `?token=${encodeURIComponent(sessionToken)}` : '';
+        const wsUrl = `${wsProtocol}//${window.location.host}/ws${tokenQuery}`;
+        ws = new WebSocket(wsUrl);
+        
+        ws.onopen = () => {
+            console.log('WebSocket connected:', wsUrl);
+            isConnected = true;
+            updateStatus('Ready', 'ready');
+            finish(true);
+            if (voiceServicesReady && !isAutoListening) {
+                initAutoListening().catch((error) => {
+                    console.error('[VOICE] Auto-listening start after reconnect failed:', error);
+                });
+            }
+        };
+        
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            handleMessage(data);
+        };
+        
+        ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+            updateStatus('Connection Error', 'error');
+            finish(false);
+        };
+        
+        ws.onclose = () => {
+            console.log('WebSocket disconnected');
+            isConnected = false;
+            updateStatus('Disconnected', 'error');
+            if (voiceServicesReady) {
+                updateVoiceStatus('loading');
+            }
+            finish(false);
+            setTimeout(connectWebSocket, 3000);
+        };
+    });
+}
+
+async function ensureVoiceServicesReady() {
+    if (voiceServicesReady) return true;
+    if (voiceWarmPromise) return voiceWarmPromise;
+
+    voiceWarmPromise = (async () => {
+        _systemBusy = true;
+        updateVoiceStatus('loading');
+
+        try {
+            const response = await fetch('/api/voice/readiness', {
+                credentials: 'include'
+            });
+            const data = await response.json();
+
+            if (!response.ok || !data.ready) {
+                throw new Error(data.message || data.last_error || 'Voice services are not ready');
+            }
+
+            voiceServicesReady = true;
+            console.log('[VOICE] Voice services warmed and ready');
+            return true;
+        } catch (error) {
+            console.error('[VOICE] Voice warmup failed:', error);
+            updateResponse('Voice services failed to load.');
+            updateVoiceStatus('idle');
+            return false;
+        } finally {
+            _systemBusy = false;
+            voiceWarmPromise = null;
+        }
+    })();
+
+    return voiceWarmPromise;
 }
 
 // Accumulator for streamed tokens
@@ -321,8 +383,8 @@ function updateVoiceStatus(state) {
     if (!wrapper || !statusEl) return;
 
     // Clear all state classes
-    wrapper.classList.remove('auto-listening', 'speech-detected', 'listening', 'thinking-state');
-    statusEl.classList.remove('listening', 'thinking');
+    wrapper.classList.remove('auto-listening', 'speech-detected', 'listening', 'thinking-state', 'loading-state');
+    statusEl.classList.remove('listening', 'thinking', 'loading');
     statusEl.textContent = '';
 
     switch (state) {
@@ -346,6 +408,11 @@ function updateVoiceStatus(state) {
             break;
         case 'needs-permission':
             statusEl.textContent = 'Click anywhere to enable mic';
+            break;
+        case 'loading':
+            wrapper.classList.add('loading-state');
+            statusEl.classList.add('loading');
+            statusEl.textContent = 'Loading...';
             break;
         default:
             // idle — only go back to listening if system is not busy
@@ -387,6 +454,8 @@ function _pickMime() {
 
 // ── Initialise auto-listening (called once from init) ──
 async function initAutoListening() {
+    if (isAutoListening || !voiceServicesReady) return;
+
     const isLocalhost = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
     if (!window.isSecureContext && !isLocalhost) {
         console.warn('[VOICE] Not a secure context – mic unavailable');
@@ -420,6 +489,8 @@ async function initAutoListening() {
 }
 
 async function _startAutoListening() {
+    if (isAutoListening) return;
+
     // Acquire mic stream (once)
     if (!micStream) {
         micStream = await navigator.mediaDevices.getUserMedia({
@@ -990,9 +1061,16 @@ async function init() {
     updateTime();
     setInterval(updateTime, 1000);
     
-    connectWebSocket();
     createRaindrops();
-    initAutoListening();
+    updateVoiceStatus('loading');
+
+    const voiceReady = await ensureVoiceServicesReady();
+    if (voiceReady) {
+        const wsReady = await connectWebSocket();
+        if (wsReady) {
+            await initAutoListening();
+        }
+    }
     
     // Initialize face verification
     initFaceVerification();

@@ -357,6 +357,34 @@ templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
 sessions = {}
 SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL_SECONDS", "86400"))
 SESSION_SIGNING_SECRET = os.getenv("SESSION_SIGNING_SECRET", os.getenv("SECRET_KEY", "change-me-session-secret"))
+voice_service_warm_lock = asyncio.Lock()
+voice_service_state = {
+    "ready": False,
+    "loading": False,
+    "stt_ready": False,
+    "tts_ready": False,
+    "last_error": "",
+}
+
+
+def _elapsed_ms(started_at: float) -> float:
+    return (time.perf_counter() - started_at) * 1000.0
+
+
+@app.middleware("http")
+async def timing_middleware(request: Request, call_next):
+    path = request.url.path
+    if path.startswith("/static"):
+        return await call_next(request)
+
+    started_at = time.perf_counter()
+    response = None
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        status = getattr(response, "status_code", "ERR")
+        print(f"[TIMING] HTTP {request.method} {path} -> {status} in {_elapsed_ms(started_at):.0f} ms")
 
 
 def _b64url_encode(raw: bytes) -> str:
@@ -420,6 +448,42 @@ def _set_session_cookie(response: Response, token: str) -> None:
         max_age=SESSION_TTL_SECONDS,
         samesite="lax",
     )
+
+
+async def _ensure_voice_services_ready() -> dict:
+    if voice_service_state["ready"]:
+        return dict(voice_service_state)
+
+    async with voice_service_warm_lock:
+        if voice_service_state["ready"]:
+            return dict(voice_service_state)
+
+        voice_service_state["loading"] = True
+        voice_service_state["last_error"] = ""
+
+        try:
+            await asyncio.to_thread(_get_whisper_model)
+            voice_service_state["stt_ready"] = True
+
+            from app.services.tts_service import warm_tts, get_sentence_audio_bytes
+
+            await asyncio.to_thread(warm_tts)
+            voice_service_state["tts_ready"] = True
+
+            # Run one short synthesis so the first real response does not block.
+            await asyncio.to_thread(get_sentence_audio_bytes, "Voice services ready.")
+
+            voice_service_state["ready"] = True
+            print("[VOICE] STT and TTS are ready.")
+        except Exception as exc:
+            voice_service_state["ready"] = False
+            voice_service_state["last_error"] = str(exc)
+            print(f"[VOICE] Warmup failed: {exc}")
+            raise
+        finally:
+            voice_service_state["loading"] = False
+
+    return dict(voice_service_state)
 
 # ── Auto-select OAuth broker based on OAUTH_METHOD ──
 OAUTH_METHOD = os.getenv("OAUTH_METHOD", "vps").lower().strip()
@@ -812,6 +876,31 @@ async def get_current_user(session_token: Optional[str] = Cookie(None)):
         raise HTTPException(status_code=404, detail="User not found")
     
     return user
+
+
+@app.get("/api/voice/readiness")
+async def voice_readiness(session_token: Optional[str] = Cookie(None)):
+    username = _resolve_session_user(session_token)
+    if not username:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        state = await _ensure_voice_services_ready()
+    except Exception:
+        return JSONResponse(
+            status_code=500,
+            content={
+                **voice_service_state,
+                "ready": False,
+                "message": "Voice services failed to load",
+            },
+        )
+
+    return {
+        **state,
+        "message": "Voice services ready",
+        "model": ACTIVE_FACE_MODEL_NAME,
+    }
 
 @app.get("/pair-complete", response_class=HTMLResponse)
 async def pair_complete_page(request: Request, mode: str = "face_on_pc"):
@@ -1212,7 +1301,9 @@ async def websocket_endpoint(
     try:
         from app.services.tts_service import get_sentence_audio_bytes
         welcome_text = f"Welcome, {first_name}!"
+        welcome_tts_started = time.perf_counter()
         welcome_wav = await asyncio.to_thread(get_sentence_audio_bytes, welcome_text)
+        print(f"[TIMING] WS welcome_tts in {_elapsed_ms(welcome_tts_started):.0f} ms")
         if welcome_wav:
             import base64 as _b64
             await websocket.send_json({"type": "tts_audio", "data": _b64.b64encode(welcome_wav).decode('ascii')})
@@ -1227,6 +1318,11 @@ async def websocket_endpoint(
             if ws_message.get("type") == "websocket.disconnect":
                 break
 
+            turn_started = time.perf_counter()
+            stt_ms = None
+            first_token_ms = None
+            tts_total_ms = 0.0
+            request_kind = "text"
             user_text = None
 
             if "text" in ws_message:
@@ -1237,8 +1333,12 @@ async def websocket_endpoint(
                     # Base64-encoded audio from browser
                     audio_b64 = data.get("data", "")
                     if audio_b64:
+                        request_kind = "voice"
                         audio_bytes = base64.b64decode(audio_b64)
+                        stt_started = time.perf_counter()
                         transcript = await asyncio.to_thread(transcribe_audio_bytes, audio_bytes)
+                        stt_ms = _elapsed_ms(stt_started)
+                        print(f"[TIMING] WS STT {stt_ms:.0f} ms ({len(audio_bytes)} bytes)")
                         if transcript:
                             print(f"[VOICE] \"{transcript}\"")
                             await websocket.send_json({"type": "transcript", "text": transcript})
@@ -1250,8 +1350,12 @@ async def websocket_endpoint(
 
             elif "bytes" in ws_message:
                 # Raw binary audio
+                request_kind = "voice"
                 audio_bytes = ws_message["bytes"]
+                stt_started = time.perf_counter()
                 transcript = await asyncio.to_thread(transcribe_audio_bytes, audio_bytes)
+                stt_ms = _elapsed_ms(stt_started)
+                print(f"[TIMING] WS STT {stt_ms:.0f} ms ({len(audio_bytes)} bytes)")
                 if transcript:
                     print(f"[VOICE] \"{transcript}\"")
                     await websocket.send_json({"type": "transcript", "text": transcript})
@@ -1291,6 +1395,7 @@ async def websocket_endpoint(
             # Append to in-memory history (same as agent2_memory.py pattern)
             messages.append(HumanMessage(content=user_text))
 
+            agent_started = time.perf_counter()
             try:
                 # ── Streaming agent invocation ──────────────────────────
                 # Stream tokens from the LLM and pipe completed sentences
@@ -1364,6 +1469,8 @@ async def websocket_endpoint(
                                 "token": token,
                                 "first": not sent_first_chunk,
                             })
+                            if first_token_ms is None:
+                                first_token_ms = _elapsed_ms(agent_started)
                             sent_first_chunk = True
 
                             # When a sentence boundary is hit, dispatch to TTS
@@ -1375,7 +1482,11 @@ async def websocket_endpoint(
                                 sentence_buffer = sentence_buffer[sentence_end:]
                                 if sentence:
                                     await websocket.send_json({"type": "voice_state", "state": "speaking"})
+                                    sentence_tts_started = time.perf_counter()
                                     audio_wav = await asyncio.to_thread(get_sentence_audio_bytes, sentence)
+                                    tts_chunk_ms = _elapsed_ms(sentence_tts_started)
+                                    tts_total_ms += tts_chunk_ms
+                                    print(f"[TIMING] WS TTS sentence in {tts_chunk_ms:.0f} ms ({len(sentence)} chars)")
                                     if audio_wav:
                                         audio_b64 = base64.b64encode(audio_wav).decode('ascii')
                                         await websocket.send_json({"type": "tts_audio", "data": audio_b64})
@@ -1391,7 +1502,11 @@ async def websocket_endpoint(
                 if remaining:
                     remaining = _re.sub(r"<think>[\s\S]*?</think>", "", remaining).strip()
                     if remaining:
+                        sentence_tts_started = time.perf_counter()
                         audio_wav = await asyncio.to_thread(get_sentence_audio_bytes, remaining)
+                        tts_chunk_ms = _elapsed_ms(sentence_tts_started)
+                        tts_total_ms += tts_chunk_ms
+                        print(f"[TIMING] WS TTS tail in {tts_chunk_ms:.0f} ms ({len(remaining)} chars)")
                         if audio_wav:
                             audio_b64 = base64.b64encode(audio_wav).decode('ascii')
                             await websocket.send_json({"type": "tts_audio", "data": audio_b64})
@@ -1431,6 +1546,19 @@ async def websocket_endpoint(
                 print(f"[WS] Agent error: {agent_err}")
                 response_text = "I'm sorry, I encountered an error processing your request. Please try again."
 
+            agent_total_ms = _elapsed_ms(agent_started)
+            turn_total_ms = _elapsed_ms(turn_started)
+            stt_display_ms = 0.0 if stt_ms is None else stt_ms
+            first_token_display_ms = 0.0 if first_token_ms is None else first_token_ms
+            print(
+                f"[TIMING] WS turn type={request_kind} "
+                f"stt={stt_display_ms:.0f} ms "
+                f"first_token={first_token_display_ms:.0f} ms "
+                f"agent={agent_total_ms:.0f} ms "
+                f"tts={tts_total_ms:.0f} ms "
+                f"total={turn_total_ms:.0f} ms"
+            )
+
             # Send final complete response + state reset
             await websocket.send_json({"type": "animation_stop"})
             await websocket.send_json({"type": "response", "text": response_text})
@@ -1458,36 +1586,38 @@ async def get_weather(session_token: Optional[str] = Cookie(None)):
     url = f"http://api.weatherapi.com/v1/forecast.json?key={API_KEY}&q={location}&days=1"
     
     try:
+        weather_started = time.perf_counter()
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(url)
             data = response.json()
-            
-            if response.status_code == 200:
-                if 'forecast' in data and 'forecastday' in data['forecast']:
-                    forecast_day = data['forecast']['forecastday'][0]['day']
-                    return {
-                        "temp": data['current']['temp_c'],
-                        "condition": data['current']['condition']['text'],
-                        "location": location,
-                        "temp_min": forecast_day['mintemp_c'],
-                        "temp_max": forecast_day['maxtemp_c']
-                    }
-                else:
-                    return {
-                        "temp": data['current']['temp_c'],
-                        "condition": data['current']['condition']['text'],
-                        "location": location,
-                        "temp_min": 5,
-                        "temp_max": 12
-                    }
+        print(f"[TIMING] Weather upstream {location} in {_elapsed_ms(weather_started):.0f} ms")
+        
+        if response.status_code == 200:
+            if 'forecast' in data and 'forecastday' in data['forecast']:
+                forecast_day = data['forecast']['forecastday'][0]['day']
+                return {
+                    "temp": data['current']['temp_c'],
+                    "condition": data['current']['condition']['text'],
+                    "location": location,
+                    "temp_min": forecast_day['mintemp_c'],
+                    "temp_max": forecast_day['maxtemp_c']
+                }
             else:
                 return {
-                    "temp": 8,
-                    "condition": "Unable to fetch weather",
+                    "temp": data['current']['temp_c'],
+                    "condition": data['current']['condition']['text'],
                     "location": location,
                     "temp_min": 5,
                     "temp_max": 12
                 }
+        else:
+            return {
+                "temp": 8,
+                "condition": "Unable to fetch weather",
+                "location": location,
+                "temp_min": 5,
+                "temp_max": 12
+            }
     except Exception as e:
         print(f"[Weather] Error: {e}")
         return {
@@ -1528,15 +1658,17 @@ async def get_news(session_token: Optional[str] = Cookie(None)):
         url = f"https://newsapi.org/v2/top-headlines?country=us&apiKey={API_KEY}"
     
     try:
+        news_started = time.perf_counter()
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(url)
             data = response.json()
-            
-            if data.get("status") == "ok" and data.get("articles"):
-                articles = [{"title": article["title"]} for article in data["articles"][:5]]
-                return articles
-            else:
-                return [{"title": "Unable to fetch news at this time"}]
+        print(f"[TIMING] News upstream in {_elapsed_ms(news_started):.0f} ms")
+        
+        if data.get("status") == "ok" and data.get("articles"):
+            articles = [{"title": article["title"]} for article in data["articles"][:5]]
+            return articles
+        else:
+            return [{"title": "Unable to fetch news at this time"}]
     except Exception as e:
         print(f"[News] Error: {e}")
         return [
@@ -1558,7 +1690,9 @@ async def get_calendar():
         }
 
     try:
+        calendar_started = time.perf_counter()
         events = get_todays_events()
+        print(f"[TIMING] Calendar upstream in {_elapsed_ms(calendar_started):.0f} ms")
 
         if not events:
             return {"events": []}

@@ -41,6 +41,11 @@ def _get_pipeline():
     return _kokoro_pipeline
 
 
+def warm_tts() -> None:
+    """Load the Kokoro pipeline ahead of the first spoken response."""
+    _get_pipeline()
+
+
 def speak(text: str, voice: str = 'af_heart', speed: float = 1.0) -> None:
     """
     Convert text to speech using Kokoro TTS and play it through speakers.

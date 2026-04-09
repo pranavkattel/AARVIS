@@ -157,6 +157,14 @@ body {
     border-color: rgba(255,255,255,0.55);
     animation-duration: 1.6s;
 }
+.sm-voice-ring.loading-state .pulse {
+    border-color: rgba(255,255,255,0.18);
+    animation-duration: 2.2s;
+}
+.sm-voice-ring.loading-state .sm-voice-dot {
+    opacity: 0.45;
+    animation: think-pulse 1.4s ease-in-out infinite;
+}
 .sm-voice-ring.thinking-state .sm-voice-dot {
     opacity: 1;
     animation: think-pulse 1.2s ease-in-out infinite;
@@ -204,7 +212,8 @@ body {
     min-height: 14px;
 }
 .voice-status.listening,
-.voice-status.thinking { opacity: 0.8; }
+.voice-status.thinking,
+.voice-status.loading { opacity: 0.8; }
 
 /* Text input — hidden */
 .sm-text-input { display: none; }
