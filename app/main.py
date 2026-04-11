@@ -40,7 +40,7 @@ except Exception:
 from app.database import (
     get_user_by_username, save_conversation, get_recent_context,
     create_google_user, get_user_by_google_id, get_user_google_tokens, update_google_tokens,
-    get_all_users, delete_user_by_id, admin_update_user,
+    get_all_users, delete_user_by_id, admin_update_user, update_user_preferences,
 )
 from app.services.google_oauth import build_auth_url_with_verifier, exchange_code_for_tokens
 from langchain_core.messages import HumanMessage, AIMessage
@@ -861,6 +861,59 @@ async def get_current_user(session_token: Optional[str] = Cookie(None)):
     return user
 
 
+@app.post("/api/user/context")
+async def update_user_context(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Best-effort update of user location/interests from the current device context."""
+    username = _resolve_session_user(session_token)
+    if not username:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    payload = await request.json()
+    provided_location = str(payload.get("location", "") or "").strip()
+    provided_interests = str(payload.get("interests", "") or "").strip()
+    latitude = payload.get("latitude")
+    longitude = payload.get("longitude")
+
+    resolved_location = provided_location
+
+    # If browser geolocation was sent, resolve it into a human-readable place
+    # using the same weather provider already used by this project.
+    if not resolved_location and latitude is not None and longitude is not None:
+        try:
+            lat = float(latitude)
+            lon = float(longitude)
+            api_key = "10428bba45b34ba8b4543622252612"
+            reverse_url = f"http://api.weatherapi.com/v1/current.json?key={api_key}&q={lat},{lon}"
+
+            import httpx
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                reverse_response = await client.get(reverse_url)
+                reverse_data = reverse_response.json()
+
+            if reverse_response.status_code == 200 and reverse_data.get("location"):
+                loc = reverse_data["location"]
+                city = (loc.get("name") or "").strip()
+                region = (loc.get("region") or "").strip()
+                country = (loc.get("country") or "").strip()
+                parts = [p for p in [city, region, country] if p]
+                if parts:
+                    resolved_location = ", ".join(parts)
+        except Exception:
+            pass
+
+    update_location = resolved_location if resolved_location else None
+    update_interests = provided_interests if provided_interests else None
+    if update_location or update_interests:
+        update_user_preferences(username, location=update_location, interests=update_interests)
+
+    user = get_user_by_username(username) or {}
+    return {
+        "ok": True,
+        "location": user.get("location", ""),
+        "interests": user.get("interests", ""),
+    }
+
+
 @app.get("/api/voice/readiness")
 async def voice_readiness(session_token: Optional[str] = Cookie(None)):
     username = _resolve_session_user(session_token)
@@ -1600,13 +1653,67 @@ async def websocket_endpoint(
     except WebSocketDisconnect:
         print(f"[WS] {username} disconnected")
 
+
+def _infer_news_country_code(location: str | None) -> str | None:
+    """Infer NewsAPI country code from free-form location text."""
+    if not location:
+        return None
+
+    lowered = location.lower()
+    location_map = {
+        "united states": "us",
+        "usa": "us",
+        "america": "us",
+        "united kingdom": "gb",
+        "uk": "gb",
+        "england": "gb",
+        "india": "in",
+        "australia": "au",
+        "canada": "ca",
+        "france": "fr",
+        "germany": "de",
+        "japan": "jp",
+        "singapore": "sg",
+        "uae": "ae",
+        "united arab emirates": "ae",
+    }
+
+    for token, code in location_map.items():
+        if token in lowered:
+            return code
+    return None
+
+
+def _build_news_url(api_key: str, interests: str | None, location: str | None) -> str:
+    """Build a localized NewsAPI URL using user interests and location."""
+    valid_categories = ["business", "entertainment", "health", "science", "sports", "technology"]
+    interest_list = [i.strip().lower() for i in (interests or "").split(",") if i.strip()]
+    primary_interest = interest_list[0] if interest_list else ""
+    category = primary_interest if primary_interest in valid_categories else None
+    country_code = _infer_news_country_code(location)
+
+    if category and country_code:
+        return f"https://newsapi.org/v2/top-headlines?country={country_code}&category={category}&apiKey={api_key}"
+
+    if category:
+        query_text = f"{category} {location or ''}".strip()
+        query = urllib.parse.quote_plus(query_text or category)
+        return f"https://newsapi.org/v2/everything?q={query}&sortBy=publishedAt&language=en&apiKey={api_key}"
+
+    if country_code and not primary_interest:
+        return f"https://newsapi.org/v2/top-headlines?country={country_code}&apiKey={api_key}"
+
+    query_terms = [t for t in [primary_interest, location] if t]
+    query = urllib.parse.quote_plus(" ".join(query_terms) if query_terms else "world")
+    return f"https://newsapi.org/v2/everything?q={query}&sortBy=publishedAt&language=en&apiKey={api_key}"
+
 @app.get("/api/weather")
 async def get_weather(session_token: Optional[str] = Cookie(None)):
     """Get weather data from WeatherAPI.com based on user's location"""
     import httpx
     
     # Get user's location preference
-    location = "Kathmandu"  # Default
+    location = "auto:ip"  # sensible fallback when user profile has no explicit location
     if session_token and session_token in sessions:
         username = sessions[session_token]
         user = get_user_by_username(username)
@@ -1625,12 +1732,16 @@ async def get_weather(session_token: Optional[str] = Cookie(None)):
         print(f"[TIMING] Weather upstream {location} in {_elapsed_ms(weather_started):.0f} ms")
         
         if response.status_code == 200:
+            location_info = data.get("location") or {}
+            resolved_location = ", ".join(
+                [p for p in [location_info.get("name"), location_info.get("country")] if p]
+            ) or location
             if 'forecast' in data and 'forecastday' in data['forecast']:
                 forecast_day = data['forecast']['forecastday'][0]['day']
                 return {
                     "temp": data['current']['temp_c'],
                     "condition": data['current']['condition']['text'],
-                    "location": location,
+                    "location": resolved_location,
                     "temp_min": forecast_day['mintemp_c'],
                     "temp_max": forecast_day['maxtemp_c']
                 }
@@ -1638,7 +1749,7 @@ async def get_weather(session_token: Optional[str] = Cookie(None)):
                 return {
                     "temp": data['current']['temp_c'],
                     "condition": data['current']['condition']['text'],
-                    "location": location,
+                    "location": resolved_location,
                     "temp_min": 5,
                     "temp_max": 12
                 }
@@ -1665,29 +1776,19 @@ async def get_news(session_token: Optional[str] = Cookie(None)):
     """Get top headlines from NewsAPI.org based on user interests"""
     import httpx
     
-    # Get user's interests
+    # Get user's interests and location
     interests = None
+    location = None
     if session_token and session_token in sessions:
         username = sessions[session_token]
         user = get_user_by_username(username)
         if user and user.get('interests'):
             interests = user['interests']
+        if user and user.get('location'):
+            location = user['location']
     
     API_KEY = "b47750eb5d3a45cda2f4542d117a42e8"
-    
-    # Build URL based on interests
-    if interests:
-        # Use first interest as category or search query
-        interest_list = [i.strip().lower() for i in interests.split(',')]
-        # Try category first (business, entertainment, health, science, sports, technology)
-        category = interest_list[0] if interest_list[0] in ['business', 'entertainment', 'health', 'science', 'sports', 'technology'] else None
-        if category:
-            url = f"https://newsapi.org/v2/top-headlines?country=us&category={category}&apiKey={API_KEY}"
-        else:
-            # Use as search query
-            url = f"https://newsapi.org/v2/everything?q={interest_list[0]}&sortBy=publishedAt&apiKey={API_KEY}"
-    else:
-        url = f"https://newsapi.org/v2/top-headlines?country=us&apiKey={API_KEY}"
+    url = _build_news_url(API_KEY, interests=interests, location=location)
     
     try:
         news_started = time.perf_counter()
@@ -1871,7 +1972,7 @@ async def trigger_briefing(session_token: Optional[str] = Cookie(None)):
     weather_text = "Weather unavailable."
     try:
         API_KEY = "10428bba45b34ba8b4543622252612"
-        location = user.get('location', 'Kathmandu')
+        location = user.get('location') or 'auto:ip'
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(
                 f"http://api.weatherapi.com/v1/forecast.json?key={API_KEY}&q={location}&days=1"
@@ -1885,13 +1986,9 @@ async def trigger_briefing(session_token: Optional[str] = Cookie(None)):
     news_text = "News unavailable."
     try:
         interests = user.get('interests', 'technology')
-        category = interests.split(',')[0].strip().lower()
         API_KEY_NEWS = "b47750eb5d3a45cda2f4542d117a42e8"
-        valid_cats = ['business', 'entertainment', 'health', 'science', 'sports', 'technology']
-        if category in valid_cats:
-            news_url = f"https://newsapi.org/v2/top-headlines?country=us&category={category}&apiKey={API_KEY_NEWS}"
-        else:
-            news_url = f"https://newsapi.org/v2/top-headlines?country=us&apiKey={API_KEY_NEWS}"
+        location = user.get('location') or ''
+        news_url = _build_news_url(API_KEY_NEWS, interests=interests, location=location)
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(news_url)
             nd = resp.json()

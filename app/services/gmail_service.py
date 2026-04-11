@@ -25,6 +25,19 @@ def set_current_user(username: str | None) -> None:
     _current_username = username
 
 
+def _recover_refresh_token_from_legacy_pickle() -> str | None:
+    """Best-effort migration for older local installs that stored Gmail creds in pickle."""
+    try:
+        if not os.path.exists(GMAIL_TOKEN_FILE):
+            return None
+        with open(GMAIL_TOKEN_FILE, 'rb') as f:
+            legacy_creds = pickle.load(f)
+        token = getattr(legacy_creds, "refresh_token", None)
+        return token or None
+    except Exception:
+        return None
+
+
 def get_gmail_service(username: str | None = None, require_send_scope: bool = False):
     """
     Authenticate and return a Gmail service.
@@ -45,6 +58,17 @@ def get_gmail_service(username: str | None = None, require_send_scope: bool = Fa
                 raise GoogleReauthRequiredError(
                     "No Google OAuth token found for this user. Please re-authenticate."
                 )
+
+            if not token_row.get("google_refresh_token"):
+                recovered_refresh = _recover_refresh_token_from_legacy_pickle()
+                if recovered_refresh:
+                    # Persist recovered refresh token so future requests remain stable.
+                    update_google_tokens(resolved_user, {
+                        "access_token": token_row.get("google_access_token"),
+                        "refresh_token": recovered_refresh,
+                        "expiry": token_row.get("google_token_expiry"),
+                    })
+                    token_row["google_refresh_token"] = recovered_refresh
 
             scopes_raw = token_row.get("google_scopes") or ""
             stored_scopes = {s.strip() for s in scopes_raw.split(",") if s.strip()}

@@ -6,6 +6,7 @@ from googleapiclient.errors import HttpError
 import httpx
 import csv
 import os
+import urllib.parse
 
 # ── Contacts CSV helper ────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -23,6 +24,33 @@ def lookup_contact(name: str) -> str | None:
                     return row.get('email', '').strip()
     except Exception:
         pass
+    return None
+
+
+def _infer_news_country_code(location: str | None) -> str | None:
+    if not location:
+        return None
+    lowered = location.lower()
+    mapping = {
+        "united states": "us",
+        "usa": "us",
+        "america": "us",
+        "united kingdom": "gb",
+        "uk": "gb",
+        "england": "gb",
+        "india": "in",
+        "australia": "au",
+        "canada": "ca",
+        "france": "fr",
+        "germany": "de",
+        "japan": "jp",
+        "singapore": "sg",
+        "uae": "ae",
+        "united arab emirates": "ae",
+    }
+    for token, code in mapping.items():
+        if token in lowered:
+            return code
     return None
 # ───────────────────────────────────────────────────────────────
 
@@ -194,17 +222,26 @@ def get_weather(location: str) -> str:
 
 
 @tool
-def get_news(interests: str) -> str:
-    """Get latest news headlines. Call this when the user asks about news, current events, headlines, or what's happening in the world."""
+def get_news(interests: str, location: str = "") -> str:
+    """Get latest news headlines. Optionally pass user's location for region-relevant coverage."""
     API_KEY = "b47750eb5d3a45cda2f4542d117a42e8"
-    interest_list = [i.strip().lower() for i in interests.split(',')]
+    interest_list = [i.strip().lower() for i in (interests or "").split(',') if i.strip()]
     valid_categories = ['business', 'entertainment', 'health', 'science', 'sports', 'technology']
-    category = interest_list[0] if interest_list[0] in valid_categories else None
+    primary_interest = interest_list[0] if interest_list else ""
+    category = primary_interest if primary_interest in valid_categories else None
+    country_code = _infer_news_country_code(location)
 
-    if category:
-        url = f"https://newsapi.org/v2/top-headlines?country=us&category={category}&apiKey={API_KEY}"
+    if category and country_code:
+        url = f"https://newsapi.org/v2/top-headlines?country={country_code}&category={category}&apiKey={API_KEY}"
+    elif category:
+        query = urllib.parse.quote_plus(f"{category} {location or ''}".strip() or category)
+        url = f"https://newsapi.org/v2/everything?q={query}&sortBy=publishedAt&language=en&apiKey={API_KEY}"
+    elif country_code and not primary_interest:
+        url = f"https://newsapi.org/v2/top-headlines?country={country_code}&apiKey={API_KEY}"
     else:
-        url = f"https://newsapi.org/v2/everything?q={interest_list[0]}&sortBy=publishedAt&apiKey={API_KEY}"
+        query_text = " ".join([p for p in [primary_interest, location] if p]) or "world"
+        query = urllib.parse.quote_plus(query_text)
+        url = f"https://newsapi.org/v2/everything?q={query}&sortBy=publishedAt&language=en&apiKey={API_KEY}"
 
     try:
         response = httpx.get(url, timeout=10.0)

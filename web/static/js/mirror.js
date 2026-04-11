@@ -49,6 +49,53 @@ async function checkAuth() {
     }
 }
 
+async function syncUserContextFromBrowser() {
+    if (!currentUser) return;
+
+    const hasProfileLocation = Boolean(currentUser.location && String(currentUser.location).trim());
+    if (hasProfileLocation) return;
+
+    if (!navigator.geolocation) return;
+
+    const coords = await new Promise((resolve) => {
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                resolve({
+                    latitude: position.coords.latitude,
+                    longitude: position.coords.longitude,
+                });
+            },
+            () => resolve(null),
+            {
+                enableHighAccuracy: false,
+                timeout: 4500,
+                maximumAge: 15 * 60 * 1000,
+            }
+        );
+    });
+
+    if (!coords) return;
+
+    try {
+        const response = await fetch('/api/user/context', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(coords),
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            if (data && data.location) {
+                currentUser.location = data.location;
+                console.log('[DEBUG] Updated user location from browser:', data.location);
+            }
+        }
+    } catch (error) {
+        console.warn('[DEBUG] Could not sync browser location:', error);
+    }
+}
+
 function connectWebSocket() {
     if (isConnected && ws && ws.readyState === WebSocket.OPEN) {
         return Promise.resolve(true);
@@ -1115,6 +1162,12 @@ async function init() {
     }
     
     console.log('[DEBUG] Auth successful, user:', currentUser);
+
+    try {
+        await syncUserContextFromBrowser();
+    } catch (_) {
+        // Non-fatal; weather/news endpoints already have fallbacks.
+    }
     
     // Force immediate greeting update with loaded user data
     const now = new Date();
