@@ -4,6 +4,7 @@ from pathlib import Path
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
+from app.services.google_oauth import credentials_from_db, GoogleReauthRequiredError
 
 GMAIL_SCOPES = [
     'https://www.googleapis.com/auth/gmail.readonly',
@@ -24,7 +25,7 @@ def set_current_user(username: str | None) -> None:
     _current_username = username
 
 
-def get_gmail_service(username: str | None = None):
+def get_gmail_service(username: str | None = None, require_send_scope: bool = False):
     """
     Authenticate and return a Gmail service.
 
@@ -39,21 +40,39 @@ def get_gmail_service(username: str | None = None):
     if resolved_user:
         try:
             from app.database import get_user_google_tokens, update_google_tokens
-            from app.services.google_oauth import credentials_from_db
             token_row = get_user_google_tokens(resolved_user)
-            if token_row:
-                creds = credentials_from_db(token_row)
-                # Persist any refreshed tokens back to the DB
-                if creds.token != token_row.get("google_access_token"):
-                    from datetime import timezone
-                    update_google_tokens(resolved_user, {
-                        "access_token":  creds.token,
-                        "refresh_token": creds.refresh_token,
-                        "expiry":        creds.expiry.isoformat() if creds.expiry else None,
-                    })
-                return build('gmail', 'v1', credentials=creds, cache_discovery=False)
+            if not token_row:
+                raise GoogleReauthRequiredError(
+                    "No Google OAuth token found for this user. Please re-authenticate."
+                )
+
+            scopes_raw = token_row.get("google_scopes") or ""
+            stored_scopes = {s.strip() for s in scopes_raw.split(",") if s.strip()}
+            send_scope = "https://www.googleapis.com/auth/gmail.send"
+            if require_send_scope and send_scope not in stored_scopes:
+                raise GoogleReauthRequiredError(
+                    "Missing Gmail send permission. Please re-authenticate to allow sending email."
+                )
+
+            creds = credentials_from_db(token_row)
+            if require_send_scope and send_scope not in set(creds.scopes or []):
+                raise GoogleReauthRequiredError(
+                    "Missing Gmail send permission. Please re-authenticate to allow sending email."
+                )
+
+            # Persist any refreshed tokens back to the DB
+            if creds.token != token_row.get("google_access_token"):
+                update_google_tokens(resolved_user, {
+                    "access_token":  creds.token,
+                    "refresh_token": creds.refresh_token,
+                    "expiry":        creds.expiry.isoformat() if creds.expiry else None,
+                })
+            return build('gmail', 'v1', credentials=creds, cache_discovery=False)
+        except GoogleReauthRequiredError:
+            raise
         except Exception as e:
-            print(f"[Gmail] Per-user credential load failed for {resolved_user}: {e}. Falling back to pickle.")
+            print(f"[Gmail] Per-user credential load failed for {resolved_user}: {e}.")
+            raise
 
     # ── Legacy single-user path (pickle file) ───────────────────────────────
     creds = None
@@ -70,5 +89,10 @@ def get_gmail_service(username: str | None = None):
             creds = flow.run_local_server(port=0)
         with open(GMAIL_TOKEN_FILE, 'wb') as f:
             pickle.dump(creds, f)
+
+    if require_send_scope and "https://www.googleapis.com/auth/gmail.send" not in set(creds.scopes or []):
+        raise GoogleReauthRequiredError(
+            "Missing Gmail send permission. Please re-authenticate to allow sending email."
+        )
 
     return build('gmail', 'v1', credentials=creds, cache_discovery=False)

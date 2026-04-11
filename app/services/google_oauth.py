@@ -49,6 +49,23 @@ SCOPES = [
 ]
 
 
+class GoogleReauthRequiredError(RuntimeError):
+    """Raised when stored Google OAuth tokens cannot be refreshed safely."""
+
+
+def _is_reauth_error_message(message: str) -> bool:
+    lowered = (message or "").lower()
+    markers = (
+        "need to refresh the access token",
+        "must specify refresh_token",
+        "invalid_grant",
+        "token has been expired or revoked",
+        "reauth",
+        "revoked",
+    )
+    return any(marker in lowered for marker in markers)
+
+
 def _get_client_config() -> dict:
     """Load the OAuth client configuration from disk."""
     # 1) Explicit override for VPS/container deployments.
@@ -115,7 +132,8 @@ def build_auth_url(state: str = "", redirect_uri: str = None) -> str:
     auth_url, _ = flow.authorization_url(
         access_type="offline",      # get a refresh_token
         include_granted_scopes="true",
-        prompt="select_account",    # show account picker only; skip consent for returning users
+        # Force consent so Google can re-issue refresh_token and missing scopes for existing users.
+        prompt="consent select_account",
         state=state,
     )
     return auth_url
@@ -135,7 +153,7 @@ def build_auth_url_with_verifier(
     auth_url, _ = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
-        prompt="select_account",
+        prompt="consent select_account",
         state=state,
     )
     return auth_url, getattr(flow, "code_verifier", None)
@@ -212,21 +230,50 @@ def credentials_from_db(token_row: dict) -> Credentials:
         except ValueError:
             pass
 
+    access_token = token_row.get("google_access_token")
+    if not access_token:
+        raise GoogleReauthRequiredError("Google access token is missing. Please re-authenticate.")
+
+    # Backfill client metadata from config for older rows that stored partial token data.
+    # This avoids unnecessary re-auth prompts when we can still refresh safely.
+    oauth_config = {}
+    try:
+        oauth_config = _get_client_config().get("web", {})
+    except Exception:
+        oauth_config = {}
+
+    refresh_token = token_row.get("google_refresh_token") or None
+    token_uri = token_row.get("google_token_uri") or oauth_config.get("token_uri") or "https://oauth2.googleapis.com/token"
+    client_id = token_row.get("google_client_id") or oauth_config.get("client_id")
+    client_secret = token_row.get("google_client_secret") or oauth_config.get("client_secret")
+
     scopes_raw = token_row.get("google_scopes") or ",".join(SCOPES)
     scopes = [s.strip() for s in scopes_raw.split(",") if s.strip()]
 
     creds = Credentials(
-        token=token_row["google_access_token"],
-        refresh_token=token_row.get("google_refresh_token"),
-        token_uri=token_row.get("google_token_uri", "https://oauth2.googleapis.com/token"),
-        client_id=token_row.get("google_client_id"),
-        client_secret=token_row.get("google_client_secret"),
+        token=access_token,
+        refresh_token=refresh_token,
+        token_uri=token_uri,
+        client_id=client_id,
+        client_secret=client_secret,
         scopes=scopes,
         expiry=expiry,
     )
 
-    # Refresh if expired
-    if creds.expired and creds.refresh_token:
-        creds.refresh(Request())
+    # Refresh if expired; if refresh context is incomplete, force a clean re-auth flow.
+    if creds.expired:
+        if not refresh_token:
+            raise GoogleReauthRequiredError("Google refresh token is missing. Please re-authenticate.")
+        if not token_uri or not client_id or not client_secret:
+            raise GoogleReauthRequiredError(
+                "Google token refresh metadata is incomplete. Please re-authenticate."
+            )
+        try:
+            creds.refresh(Request())
+        except Exception as exc:
+            message = str(exc)
+            if _is_reauth_error_message(message):
+                raise GoogleReauthRequiredError(message) from exc
+            raise
 
     return creds

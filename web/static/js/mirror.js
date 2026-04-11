@@ -151,6 +151,53 @@ let _ttsPlaying = false;
 
 let _ttsIsPlaying = false;
 let _systemBusy = false; // true while thinking/speaking — VAD paused
+let _reauthRedirectScheduled = false;
+
+function _shouldTriggerGoogleReauth(text) {
+    if (!text) return false;
+    const normalized = String(text).toLowerCase();
+
+    const markers = [
+        're-authenticate your google account',
+        'reauthenticate your google account',
+        'google account',
+        'gmail account',
+        'google refresh token',
+        'missing the google refresh token',
+        'missing refresh token',
+        'google calendar access expired',
+        'google session needs re-authentication',
+        'need you to re-authenticate',
+        'please re-authenticate your gmail account',
+        'please log in again to give me access',
+        'please sign in again to give me access',
+        'mail server connection failed',
+    ];
+
+    const hasGoogleSignal = normalized.includes('google');
+    const hasGmailSignal = normalized.includes('gmail');
+    const hasReauthSignal = (
+        normalized.includes('re-auth') ||
+        normalized.includes('reauth') ||
+        normalized.includes('refresh token') ||
+        normalized.includes('missing token') ||
+        normalized.includes('log in again') ||
+        normalized.includes('sign in again') ||
+        normalized.includes('access expired')
+    );
+
+    return markers.some((marker) => normalized.includes(marker)) || ((hasGoogleSignal || hasGmailSignal) && hasReauthSignal);
+}
+
+function _triggerGoogleReauthQrFlow(redirectUrl = '/login?reauth=google') {
+    if (_reauthRedirectScheduled) return;
+    _reauthRedirectScheduled = true;
+
+    updateResponse('Google needs to be reconnected. Opening QR sign-in...');
+    setTimeout(() => {
+        window.location.href = redirectUrl;
+    }, 1200);
+}
 
 async function _playNextTTS() {
     if (_ttsPlaying || _ttsQueue.length === 0) return;
@@ -198,7 +245,11 @@ function queueTTSAudio(base64Data) {
 function handleMessage(data) {
     switch(data.type) {
         case 'error':
-            updateResponse(data.text || 'Connection/authentication error. Please log in again.');
+            const errorText = data.text || 'Connection/authentication error. Please log in again.';
+            updateResponse(errorText);
+            if (_shouldTriggerGoogleReauth(errorText)) {
+                _triggerGoogleReauthQrFlow();
+            }
             updateVoiceStatus('idle');
             break;
         case 'response_chunk':
@@ -208,11 +259,17 @@ function handleMessage(data) {
             }
             _streamingText += data.token;
             updateResponse(_streamingText);
+            if (_shouldTriggerGoogleReauth(_streamingText)) {
+                _triggerGoogleReauthQrFlow();
+            }
             break;
         case 'response':
             // Final complete response — overwrite streamed text
             _streamingText = '';
             updateResponse(data.text);
+            if (_shouldTriggerGoogleReauth(data.text)) {
+                _triggerGoogleReauthQrFlow();
+            }
             break;
         case 'tts_audio':
             // Server-generated TTS audio (base64 WAV) — play in browser
@@ -259,6 +316,10 @@ function handleMessage(data) {
         case 'logout':
             // Server says to log out (e.g. user said "bye bye")
             _performLogout();
+            break;
+        case 'reauth_required':
+            // Server-side deterministic signal for OAuth re-consent
+            _triggerGoogleReauthQrFlow(data && data.reauth_url ? data.reauth_url : '/login?reauth=google');
             break;
     }
 }
@@ -979,12 +1040,23 @@ function fetchCalendar() {
     fetch('/api/calendar', {
         credentials: 'include'
     })
-        .then(response => {
+        .then(async response => {
             console.log('[DEBUG] Calendar API response status:', response.status);
-            return response.json();
+            const payload = await response.json();
+            return { status: response.status, data: payload };
         })
-        .then(data => {
+        .then(({ status, data }) => {
             console.log('[DEBUG] Calendar API response data:', data);
+
+            if (status === 401 || (data && data.reauth_required)) {
+                const reauthUrl = (data && data.reauth_url) ? data.reauth_url : '/login?reauth=google';
+                updateResponse('Google session needs re-authentication. Opening QR sign-in...');
+                setTimeout(() => {
+                    window.location.href = reauthUrl;
+                }, 800);
+                return;
+            }
+
             updateCalendar(data);
         })
         .catch(error => {

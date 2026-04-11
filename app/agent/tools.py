@@ -1,6 +1,8 @@
 from pathlib import Path
 from langchain_core.tools import tool
 from app.calendar_service import get_todays_events, get_upcoming_events, add_event_simple, authenticate_google_calendar
+from app.services.google_oauth import GoogleReauthRequiredError
+from googleapiclient.errors import HttpError
 import httpx
 import csv
 import os
@@ -266,6 +268,25 @@ def send_email(to: str, topic: str, subject: str = "", body: str = "", additiona
     import base64
     from email.mime.text import MIMEText
 
+    def _looks_like_google_auth_issue(err_text: str) -> bool:
+        lowered = (err_text or "").lower()
+        markers = [
+            "google",
+            "gmail",
+            "oauth",
+            "refresh token",
+            "missing refresh token",
+            "missing gmail send permission",
+            "insufficient authentication scopes",
+            "insufficientpermissions",
+            "invalid_grant",
+            "token has been expired or revoked",
+            "reauth",
+            "re-auth",
+            "credentials do not contain the necessary fields",
+        ]
+        return any(marker in lowered for marker in markers)
+
     # Resolve recipient
     recipient_email = to
     recipient_label = to
@@ -314,7 +335,7 @@ def send_email(to: str, topic: str, subject: str = "", body: str = "", additiona
     try:
         from app.services.gmail_service import get_gmail_service
 
-        service = get_gmail_service()
+        service = get_gmail_service(require_send_scope=True)
         message = MIMEText(final_body)
         message['to'] = recipient_email
         message['subject'] = final_subject
@@ -325,7 +346,30 @@ def send_email(to: str, topic: str, subject: str = "", body: str = "", additiona
             f"Subject: {final_subject}\n\n"
             f"--- Email Body ---\n{final_body}"
         )
+    except GoogleReauthRequiredError as e:
+        return f"[REAUTH_REQUIRED_GOOGLE] {e}"
+    except HttpError as e:
+        raw_error = str(e)
+        lowered = raw_error.lower()
+        if "insufficient authentication scopes" in lowered or "insufficientpermissions" in lowered:
+            return (
+                "[REAUTH_REQUIRED_GOOGLE] "
+                "Google account is connected without Gmail send permission. "
+                "Please re-authenticate to allow sending email."
+            )
+        if "invalid_grant" in lowered or "token has been expired or revoked" in lowered:
+            return (
+                "[REAUTH_REQUIRED_GOOGLE] "
+                "Google token is expired or revoked. Please re-authenticate."
+            )
+        return f"Email failed to send: {e}\n\nComposed email:\nSubject: {final_subject}\n\n{final_body}"
     except Exception as e:
+        if _looks_like_google_auth_issue(str(e)):
+            return (
+                "[REAUTH_REQUIRED_GOOGLE] "
+                "Google authentication is incomplete or expired. "
+                "Please re-authenticate your Google account."
+            )
         return f"Email failed to send: {e}\n\nComposed email:\nSubject: {final_subject}\n\n{final_body}"
 
 

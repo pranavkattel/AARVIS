@@ -82,11 +82,17 @@ def transcribe_audio_bytes(audio_bytes: bytes) -> str | None:
 
 # Import calendar functions
 try:
-    from app.calendar_service import get_todays_events, get_upcoming_events
+    from app.calendar_service import (
+        get_todays_events,
+        get_upcoming_events,
+        set_current_user as set_calendar_current_user,
+        GoogleReauthRequiredError,
+    )
     CALENDAR_AVAILABLE = True
     print("[DEBUG] ✅ Calendar integration loaded successfully")
 except Exception as e:
     CALENDAR_AVAILABLE = False
+    GoogleReauthRequiredError = RuntimeError
     print(f"[DEBUG] ❌ Calendar integration not available: {e}")
 
 # Initialize face recognition (InsightFace for detection)
@@ -1288,6 +1294,27 @@ async def websocket_endpoint(
         print(f"[WS] Welcome TTS error (non-fatal): {e}")
 
     try:
+        def _is_google_reauth_hint(text: str) -> bool:
+            lowered = (text or "").lower()
+            markers = [
+                "[reauth_required_google]",
+                "missing gmail send permission",
+                "insufficient authentication scopes",
+                "insufficientpermissions",
+                "google token is expired or revoked",
+                "google authentication is incomplete or expired",
+                "refresh token is missing",
+                "credentials do not contain the necessary fields",
+                "mail server connection failed",
+                "couldn't send the email",
+                "could not send the email",
+                "send manually",
+                "please re-authenticate",
+                "reauthenticate your gmail account",
+                "reauthenticate your google account",
+            ]
+            return any(marker in lowered for marker in markers)
+
         while True:
             # Accept both text (JSON) and binary (audio) messages
             ws_message = await websocket.receive()
@@ -1373,6 +1400,7 @@ async def websocket_endpoint(
             messages.append(HumanMessage(content=user_text))
 
             agent_started = time.perf_counter()
+            google_reauth_required = False
             try:
                 # ── Streaming agent invocation ──────────────────────────
                 # Stream tokens from the LLM and pipe completed sentences
@@ -1406,6 +1434,18 @@ async def websocket_endpoint(
                     version="v2",
                 ):
                     kind = event.get("event")
+
+                    # Deterministic tool output hook: catch auth errors even if
+                    # the model paraphrases them later.
+                    if kind == "on_tool_end":
+                        tool_name = str(event.get("name", "") or "")
+                        tool_output = str(event.get("data", {}).get("output", "") or "")
+                        if _is_google_reauth_hint(tool_output):
+                            google_reauth_required = True
+                        elif "send_email" in tool_name.lower() and "email failed to send" in tool_output.lower():
+                            # Fallback: force reconnect flow on explicit send_email failures
+                            # so the mirror recovers through QR instead of staying stuck.
+                            google_reauth_required = True
 
                     # Capture token-by-token output from the LLM node
                     if kind == "on_chat_model_stream":
@@ -1489,6 +1529,8 @@ async def websocket_endpoint(
                             await websocket.send_json({"type": "tts_audio", "data": audio_b64})
 
                 response_text = full_response if full_response else "I didn't get a response."
+                if _is_google_reauth_hint(response_text):
+                    google_reauth_required = True
 
                 # Persist assistant response
                 save_conversation(
@@ -1504,7 +1546,13 @@ async def websocket_endpoint(
                 for m in result_messages:
                     if isinstance(m, ToolMessage):
                         tool_name = getattr(m, 'name', 'tool')
-                        pending_tool_results.append(f"[{tool_name} result: {m.content}]")
+                        tool_content = str(m.content or "")
+
+                        if _is_google_reauth_hint(tool_content):
+                            google_reauth_required = True
+                            tool_content = tool_content.replace("[REAUTH_REQUIRED_GOOGLE]", "").strip()
+
+                        pending_tool_results.append(f"[{tool_name} result: {tool_content}]")
                         continue
                     if isinstance(m, AIMessage) and getattr(m, 'tool_calls', None):
                         continue
@@ -1538,6 +1586,13 @@ async def websocket_endpoint(
 
             # Send final complete response + state reset
             await websocket.send_json({"type": "animation_stop"})
+            if google_reauth_required:
+                await websocket.send_json({
+                    "type": "reauth_required",
+                    "provider": "google",
+                    "service": "gmail",
+                    "reauth_url": "/login?reauth=google",
+                })
             await websocket.send_json({"type": "response", "text": response_text})
             await websocket.send_json({"type": "voice_state", "state": "idle"})
             await websocket.send_json({"type": "status", "text": "Ready", "state": "ready"})
@@ -1655,7 +1710,7 @@ async def get_news(session_token: Optional[str] = Cookie(None)):
         ]
 
 @app.get("/api/calendar")
-async def get_calendar():
+async def get_calendar(session_token: Optional[str] = Cookie(None)):
     """Get today's events from Google Calendar"""
     if not CALENDAR_AVAILABLE:
         return {
@@ -1666,9 +1721,26 @@ async def get_calendar():
             ]
         }
 
+    username = _resolve_session_user(session_token)
+    if not username:
+        return JSONResponse(
+            status_code=401,
+            content={
+                "events": [],
+                "reauth_required": True,
+                "reauth_url": "/login?reauth=google",
+                "message": "Session expired. Please sign in again.",
+            },
+        )
+
+    try:
+        set_calendar_current_user(username)
+    except Exception:
+        pass
+
     try:
         calendar_started = time.perf_counter()
-        events = get_todays_events()
+        events = get_todays_events(raise_on_auth_error=True)
         print(f"[TIMING] Calendar upstream in {_elapsed_ms(calendar_started):.0f} ms")
 
         if not events:
@@ -1744,6 +1816,18 @@ async def get_calendar():
 
         return {"events": formatted_events}
 
+    except GoogleReauthRequiredError as e:
+        print(f"[Calendar] Re-auth required for {username}: {e}")
+        return JSONResponse(
+            status_code=401,
+            content={
+                "events": [],
+                "reauth_required": True,
+                "reauth_url": "/login?reauth=google",
+                "message": "Google Calendar access expired. Please re-authenticate from your phone QR.",
+                "detail": str(e),
+            },
+        )
     except Exception as e:
         print(f"[Calendar] Error: {e}")
         return {"error": str(e), "events": []}

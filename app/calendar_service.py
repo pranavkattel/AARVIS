@@ -5,6 +5,7 @@ from googleapiclient.discovery import build
 from pathlib import Path
 import pickle
 from datetime import datetime, timedelta
+from app.services.google_oauth import credentials_from_db, GoogleReauthRequiredError
 
 # Scopes define the level of access
 # Use 'readonly' for read-only access, or 'calendar' for full access
@@ -39,19 +40,25 @@ def authenticate_google_calendar(username: str | None = None):
     if resolved_user:
         try:
             from app.database import get_user_google_tokens, update_google_tokens
-            from app.services.google_oauth import credentials_from_db
             token_row = get_user_google_tokens(resolved_user)
-            if token_row:
-                creds = credentials_from_db(token_row)
-                if creds.token != token_row.get("google_access_token"):
-                    update_google_tokens(resolved_user, {
-                        "access_token":  creds.token,
-                        "refresh_token": creds.refresh_token,
-                        "expiry":        creds.expiry.isoformat() if creds.expiry else None,
-                    })
-                return build('calendar', 'v3', credentials=creds, cache_discovery=False)
+            if not token_row:
+                raise GoogleReauthRequiredError(
+                    "No Google OAuth token found for this user. Please re-authenticate."
+                )
+
+            creds = credentials_from_db(token_row)
+            if creds.token != token_row.get("google_access_token"):
+                update_google_tokens(resolved_user, {
+                    "access_token":  creds.token,
+                    "refresh_token": creds.refresh_token,
+                    "expiry":        creds.expiry.isoformat() if creds.expiry else None,
+                })
+            return build('calendar', 'v3', credentials=creds, cache_discovery=False)
+        except GoogleReauthRequiredError:
+            raise
         except Exception as e:
-            print(f"[Calendar] Per-user credential load failed for {resolved_user}: {e}. Falling back to pickle.")
+            print(f"[Calendar] Per-user credential load failed for {resolved_user}: {e}.")
+            raise
 
     # ── Legacy single-user path (pickle file) ─────────────────────────────
     creds = None
@@ -76,7 +83,7 @@ def authenticate_google_calendar(username: str | None = None):
     
     return build('calendar', 'v3', credentials=creds, cache_discovery=False)
 
-def get_upcoming_events(max_results=10):
+def get_upcoming_events(max_results=10, raise_on_auth_error: bool = False):
     """Get upcoming events from Google Calendar."""
     try:
         service = authenticate_google_calendar()
@@ -106,11 +113,16 @@ def get_upcoming_events(max_results=10):
         
         return events
         
+    except GoogleReauthRequiredError as e:
+        if raise_on_auth_error:
+            raise
+        print(f"[Calendar] Re-authentication required: {e}")
+        return []
     except Exception as e:
         print(f"Error fetching calendar events: {e}")
         return []
 
-def get_todays_events():
+def get_todays_events(raise_on_auth_error: bool = False):
     """Get today's events from Google Calendar."""
     try:
         import socket
@@ -139,6 +151,11 @@ def get_todays_events():
         # Return without printing when called from API
         return events
         
+    except GoogleReauthRequiredError as e:
+        if raise_on_auth_error:
+            raise
+        print(f"[Calendar] Re-authentication required: {e}")
+        return []
     except socket.timeout:
         print("⚠️ Google Calendar connection timed out - check your internet")
         return []

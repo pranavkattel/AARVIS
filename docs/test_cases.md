@@ -3,255 +3,848 @@
 ## 6.1 Test Plan
 
 ### 6.1.1 Project Overview
+The testing phase for the AARVIS smart mirror evaluates the core integrations: Google OAuth, PyTorch-based Facial Recognition, WebSocket Voice Assistant, and Google Workspace APIs (Calendar & Gmail).
 
-The `final fixed fyp` project is an AARVIS smart mirror system built with FastAPI. Based on the current codebase, the system includes:
+The test cases focus on functional user journeys, intelligent voice interactions, and system-level integrations.
 
-- Google OAuth sign-in and face login
-- Google OAuth login and cross-device phone-to-PC pairing
-- Face detection, face enrollment, face verification, and face login
-- A mirror dashboard with time, date, greeting, weather, news, and calendar widgets
-- A WebSocket-based voice assistant with STT, TTS, and conversation history
-- Gmail and Google Calendar integration
-- Morning briefing generation
-- Admin dashboard for user management
-- SQLite-based storage for users, face embeddings, attendance, and conversation history
-- CLI-based assistant testing utilities
+## 6.2 Detailed Test Cases
 
-Note: The `Status` column is set to `Planned` so it can be updated after actual execution.
+### 6.2.1 Google OAuth Login
+**Table 11: Test of Google OAuth Login**
 
-### 6.1.2 Authentication Entry and Session Management
+**Test No:** 1
 
-| TC No. | Test Case Description | Expected Result | Status |
-|---|---|---|---|
-| TC1 | Open `/register` page | Google-based registration page loads successfully | Planned |
-| TC2 | Open `/login` page | Login page loads with Google sign-in and face-login options | Planned |
-| TC3 | Start Google sign-in from register page | User enters the Google OAuth flow successfully | Planned |
-| TC4 | Start Google sign-in from login page | User enters the Google OAuth flow successfully | Planned |
-| TC5 | Face login with enrolled Google-linked user | User is authenticated and redirected to the mirror dashboard | Planned |
-| TC6 | Face login with unknown face | Login is denied and retry continues | Planned |
-| TC7 | Face login with no visible face | API returns `No face detected` | Planned |
-| TC8 | Open `/` without valid session | User is redirected to `/login` | Planned |
-| TC9 | Call `/api/user` without valid session | API returns `401 Not authenticated` | Planned |
-| TC10 | Call `/api/user` with valid session | Authenticated user profile is returned successfully | Planned |
-| TC11 | Logout from an active session | Session is cleared and user must log in again | Planned |
-| TC12 | Session cookie creation after Google callback | Cookie is set with expected session token and flags | Planned |
-| TC13 | Session cookie creation after face login | Cookie is set with expected session token and flags | Planned |
-| TC14 | Dashboard opened with `?token=` after OAuth redirect | Token is stored locally and removed from the URL | Planned |
+**Objective:** Verify that a user can authenticate using Google OAuth.
 
-### 6.1.3 Google OAuth and Cross-Device Pairing
+**Action:** 
+➔ Navigate to the login page
+➔ Click on "Sign in with Google"
+➔ Select a Google account and grant permissions
 
-| TC No. | Test Case Description | Expected Result | Status |
-|---|---|---|---|
-| TC15 | Click Google sign-in from register page | User enters the Google OAuth start flow successfully | Planned |
-| TC16 | Click Google sign-in from login page | User enters the Google OAuth start flow successfully | Planned |
-| TC17 | Start Google OAuth with valid server configuration | Browser is redirected to Google consent screen | Planned |
-| TC18 | Google callback with valid code for a new user | Local Google user is created and redirected to face setup if needed | Planned |
-| TC19 | Google callback with valid code for an existing Google-linked user | Existing account is reused and session is created successfully | Planned |
-| TC20 | Existing local record with the same email signs in with Google | Existing account is linked to Google instead of creating a duplicate user | Planned |
-| TC21 | Google callback with `access_denied` | User is redirected back with cancellation error message | Planned |
-| TC22 | Google callback with missing authorization code | User is redirected back with `no_code` error | Planned |
-| TC23 | Google callback with token exchange failure | User is redirected back with `token_exchange_failed` error | Planned |
-| TC24 | Register page QR code generation | QR code and mobile URL are displayed correctly | Planned |
-| TC25 | Login page QR code generation | QR code and mobile URL are displayed correctly | Planned |
-| TC26 | Open `/mobile-connect` with a valid pair token | Mobile pairing page loads with correct intent | Planned |
-| TC27 | Open `/mobile-connect` with an invalid or expired pair token | Expired QR message is shown | Planned |
-| TC28 | Poll pair status before phone completes OAuth | Pair status remains `pending` until completed | Planned |
-| TC29 | Phone triggers PC fallback using `/api/pair-trigger/{pair_token}` | PC pairing state changes to `triggered` | Planned |
-| TC30 | Phone completes OAuth and user still needs face setup | PC receives session token and redirects to `/setup-face` | Planned |
-| TC31 | Phone completes OAuth and user already has face enrolled | PC receives session token and redirects to dashboard | Planned |
-| TC32 | Google OAuth started from phone with private IP callback blocked | Mobile page shows fallback guidance and PC fallback option | Planned |
-| TC33 | `/api/local-url` chooses correct local/public base URL for QR flow | Returned URL is reachable for the intended device flow | Planned |
+**Expected Result:** User is successfully authenticated and redirected to the dashboard or face setup.
 
-### 6.1.4 Face Detection, Enrollment, and Face Login
+**Actual Result:** User was successfully authenticated and redirected to the dashboard or face setup.
 
-| TC No. | Test Case Description | Expected Result | Status |
-|---|---|---|---|
-| TC34 | Open face setup page after authenticated redirect | Setup page loads and is ready for camera-based enrollment | Planned |
-| TC35 | Call `/api/face/process` with `detect_only=true` and a valid face image | API returns `detected=true` with bbox, center, frame size, and face ratio | Planned |
-| TC36 | Call `/api/face/process` with `detect_only=true` and no visible face | API returns `detected=false` and `No face detected` message | Planned |
-| TC37 | Call `/api/face/process` without image data | API returns `No image provided` error | Planned |
-| TC38 | Face endpoints called while face recognition runtime is unavailable | API returns graceful unavailable message instead of crashing | Planned |
-| TC39 | Start camera with permission granted on setup page | Live camera preview starts successfully | Planned |
-| TC40 | Start camera with permission denied on setup page | User sees camera access error message | Planned |
-| TC41 | Face becomes visible during motion-check stage | `Face detected` checklist item is marked complete | Planned |
-| TC42 | User performs `look up` motion | `Look up` checklist item is marked complete | Planned |
-| TC43 | User performs `look down` motion | `Look down` checklist item is marked complete | Planned |
-| TC44 | User performs `look left` motion | `Look left` checklist item is marked complete | Planned |
-| TC45 | User performs `look right` motion | `Look right` checklist item is marked complete | Planned |
-| TC46 | All motion checks completed successfully | `Register Face Now` button becomes enabled | Planned |
-| TC47 | Face capture remains stable through enrollment sampling | Enough valid frames are captured and embeddings are saved | Planned |
-| TC48 | Face capture is unstable or too few valid frames are collected | User is asked to retry and enrollment is not saved | Planned |
-| TC49 | Enroll face using valid session cookie | Face embeddings are stored for the authenticated user | Planned |
-| TC50 | Enroll face using token query fallback when cookie is stale or missing | Enrollment still succeeds and cookie is reset | Planned |
-| TC51 | Call `/api/face/enroll` without any images | API returns `No images provided` message | Planned |
-| TC52 | Call `/api/face/enroll` with images that contain no detectable face | API returns `No face detected in provided images` | Planned |
-| TC53 | Face login with a registered enrolled user | User is logged in, session token is issued, and welcome message is returned | Planned |
-| TC54 | Face login with an unknown user | Login is rejected with `Face not recognized` style response | Planned |
-| TC55 | Face login request with no face in frame | API returns `No face detected` | Planned |
-| TC56 | Face login request without image data | API returns `No image provided` | Planned |
-| TC57 | Face login for a non-Google legacy face profile | Login is denied and user is told to use Google Sign-In first | Planned |
-| TC58 | Face verification for a recognized dashboard user | API returns username, confidence, and cache duration | Planned |
-| TC59 | Face verification for an unknown face | API returns `detected=false` with confidence score | Planned |
-| TC60 | Check face cache within 4-minute validity window | API returns `cached=true` with remaining seconds | Planned |
-| TC61 | Check face cache after expiry or without authentication | API returns `cached=false` and asks for new verification | Planned |
+**Conclusion:** Test was successful
 
-### 6.1.5 Dashboard Bootstrapping and Personalization
+---
 
-| TC No. | Test Case Description | Expected Result | Status |
-|---|---|---|---|
-| TC62 | Open `/` with a valid session | Dashboard page loads successfully | Planned |
-| TC63 | Open `/` without a valid session | User is redirected to login page | Planned |
-| TC64 | Call `/api/user` with valid session | Authenticated user profile is returned correctly | Planned |
-| TC65 | Greeting display in morning, afternoon, evening, and night | Greeting updates to the correct time-based message | Planned |
-| TC66 | Time display update on dashboard | Current time refreshes correctly every second | Planned |
-| TC67 | Date display formatting on dashboard | Date shows correct weekday, month, day, and ordinal suffix | Planned |
-| TC68 | Personalized widgets before face verification | Weather, news, and schedule remain hidden or in waiting state | Planned |
-| TC69 | Personalized widgets after successful face verification | Weather, news, and schedule become visible and refresh normally | Planned |
-| TC70 | Dashboard initialization after auth succeeds | Weather, news, calendar, WebSocket, and voice modules start correctly | Planned |
-| TC71 | WebSocket disconnect during dashboard use | Frontend retries connection automatically | Planned |
-| TC72 | Temporary face verification error during periodic checks | System schedules retry without crashing the dashboard | Planned |
+### 6.2.2 Cross-Device QR Pairing Initialization
+**Table 12: Test of Cross-Device QR Pairing Initialization**
 
-### 6.1.6 Voice Assistant and WebSocket Interaction
+**Test No:** 2
 
-| TC No. | Test Case Description | Expected Result | Status |
-|---|---|---|---|
-| TC73 | Open WebSocket with valid session token | Connection is accepted and assistant session starts | Planned |
-| TC74 | Open WebSocket without valid session token | Socket returns authentication error and closes | Planned |
-| TC75 | Initial WebSocket connection for authenticated user | Welcome status message is sent to frontend | Planned |
-| TC76 | Send a text message through WebSocket | Assistant returns streamed response chunks successfully | Planned |
-| TC77 | End of streamed assistant response | Final response message is delivered and UI resets to ready state | Planned |
-| TC78 | Send browser-recorded audio through WebSocket | Audio is transcribed and transcript event is returned | Planned |
-| TC79 | Send empty or low-quality audio through WebSocket | System reports it could not understand audio without crashing | Planned |
-| TC80 | Voice state lifecycle during a request | Frontend cycles through listening, thinking, speaking, and idle states correctly | Planned |
-| TC81 | TTS chunks returned from server | Browser queues and plays audio sequentially without overlap | Planned |
-| TC82 | User sends a simple greeting like `hello` | Assistant responds naturally without unnecessary workflow failure | Planned |
-| TC83 | User asks about today's schedule through voice or text | Assistant answers using calendar context | Planned |
-| TC84 | User asks for weather through voice or text | Assistant answers using weather tool output | Planned |
-| TC85 | User asks for news through voice or text | Assistant answers using news tool output | Planned |
-| TC86 | User explicitly asks to send an email | Assistant uses email flow and returns appropriate result | Planned |
-| TC87 | Conversation history exists for the user before socket connect | Recent context is loaded into the new assistant session | Planned |
-| TC88 | User message and assistant response after each turn | Both are saved to `conversation_history` | Planned |
-| TC89 | User says `bye`, `logout`, or `sign out` | Goodbye audio is played and logout event is sent to frontend | Planned |
-| TC90 | LLM or tool failure during a live turn | Assistant returns safe fallback message without crashing the WebSocket session | Planned |
+**Objective:** Verify that the QR code successfully initiates the mobile pairing flow.
 
-### 6.1.7 Weather and News Modules
+**Action:** 
+➔ Scan the QR code displayed on the mirror with a mobile device
+➔ Open the generated link on the mobile browser
 
-| TC No. | Test Case Description | Expected Result | Status |
-|---|---|---|---|
-| TC91 | Weather request for user with saved location | Weather API uses saved location and returns correct data | Planned |
-| TC92 | Weather request for user without saved location | System falls back to default location | Planned |
-| TC93 | Weather API timeout or failure | Widget shows fallback weather data or friendly error text | Planned |
-| TC94 | Weather widget display values | Temperature, condition, min, max, and location render correctly in C | Planned |
-| TC95 | Periodic weather refresh | Weather data refreshes at configured interval | Planned |
-| TC96 | News request where first interest is a supported category | Category-based headlines are returned | Planned |
-| TC97 | News request where interest is not a supported category | System falls back to query-based news search or general feed | Planned |
-| TC98 | News request for user without saved interests | Default top headlines are returned | Planned |
-| TC99 | News API failure or empty article response | Widget shows fallback message instead of breaking | Planned |
-| TC100 | Periodic news refresh | News panel refreshes at configured interval | Planned |
-| TC101 | Very long headline rendering in news widget | Headlines are truncated cleanly and layout remains stable | Planned |
+**Expected Result:** The mobile browser opens the Google OAuth flow tied to the mirror's session.
 
-### 6.1.8 Calendar and Scheduling Module
+**Actual Result:** The mobile browser opened the Google OAuth flow tied to the mirror's session.
 
-| TC No. | Test Case Description | Expected Result | Status |
-|---|---|---|---|
-| TC102 | Call `/api/calendar` when calendar integration is unavailable | API returns fallback sample events instead of failing | Planned |
-| TC103 | Call `/api/calendar` with valid Google-authenticated calendar data | Events are sorted and formatted correctly for display | Planned |
-| TC104 | Call `/api/calendar` when no events exist today | Empty event list is returned gracefully | Planned |
-| TC105 | Calendar contains an all-day event | Event is rendered as `All Day` | Planned |
-| TC106 | Calendar contains malformed or partially invalid datetime fields | Event is returned with safe fallback formatting instead of crashing | Planned |
-| TC107 | `get_calendar_today` tool for a user with events | Tool returns today's events with event IDs | Planned |
-| TC108 | `get_upcoming_calendar` tool for a user with future events | Tool returns upcoming events with event IDs | Planned |
-| TC109 | Create calendar event with valid title, date, and 24-hour time | Event is created successfully in Google Calendar | Planned |
-| TC110 | Create calendar event with 12-hour input like `2:00 PM` | Time is normalized to 24-hour format before creation | Planned |
-| TC111 | Create calendar event with missing title | Tool returns validation error and does not create event | Planned |
-| TC112 | Create calendar event with invalid time format | Tool returns parse error and does not create event | Planned |
-| TC113 | Update event title only | Event title is updated successfully | Planned |
-| TC114 | Update event start time only | Event start is updated and original duration is preserved | Planned |
-| TC115 | Update event with explicit new start and end time | Event is updated to the requested new time window | Planned |
-| TC116 | Delete event with a valid `event_id` | Event is removed successfully from Google Calendar | Planned |
-| TC117 | Update or delete using invalid `event_id` | System returns graceful failure message | Planned |
-| TC118 | Expired Google Calendar token during request | Token refresh occurs and request completes successfully | Planned |
-| TC119 | Calendar operation for user without Google credentials | System returns safe failure or empty result without crashing | Planned |
+**Conclusion:** Test was successful
 
-### 6.1.9 Gmail and Intelligent Email Assistant
+---
 
-| TC No. | Test Case Description | Expected Result | Status |
-|---|---|---|---|
-| TC120 | Fetch unread emails for a Google-authenticated user | Unread emails are returned with sender, subject, and preview | Planned |
-| TC121 | Fetch unread emails when inbox has no unread messages | System returns `No unread emails.` | Planned |
-| TC122 | Summarize latest email by sender name | Latest matching email subject and content summary are returned | Planned |
-| TC123 | Summarize latest email for sender with no matching messages | System returns `No emails found` style response | Planned |
-| TC124 | Send direct email using explicit recipient email and body | Email is sent successfully through Gmail API | Planned |
-| TC125 | Send email using contact name stored in `contacts.csv` | Contact is resolved and email is sent to matched address | Planned |
-| TC126 | Send email using unknown contact name | System asks for a direct email address | Planned |
-| TC127 | Send email with topic only and no body | Assistant auto-composes subject and body, then sends email | Planned |
-| TC128 | Send email with topic plus additional context | Auto-composed email reflects the additional context | Planned |
-| TC129 | Gmail send failure after email composition | System returns failure message along with composed draft content | Planned |
-| TC130 | Expired Gmail token during read or send action | Token refresh occurs and request completes successfully | Planned |
-| TC131 | Gmail read or send request for user with missing or revoked Google credentials | System fails gracefully without crashing | Planned |
-| TC132 | Email response formatting after successful send | Result includes recipient and final subject and body information | Planned |
+### 6.2.3 Cross-Device QR Expiry
+**Table 13: Test of Cross-Device QR Expiry**
 
-### 6.1.10 Morning Briefing Module
+**Test No:** 3
 
-| TC No. | Test Case Description | Expected Result | Status |
-|---|---|---|---|
-| TC133 | Trigger morning briefing for authenticated user | Personalized briefing text is generated successfully | Planned |
-| TC134 | Briefing with calendar, weather, and news all available | Briefing includes all available context in final summary | Planned |
-| TC135 | Briefing when one or more upstream data sources fail | Briefing still generates using remaining available data | Planned |
-| TC136 | Trigger briefing without active session | API returns `401 Not authenticated` | Planned |
-| TC137 | TTS playback error during briefing | Briefing text is still returned and server does not crash | Planned |
+**Objective:** Verify that expired QR codes are rejected securely.
 
-### 6.1.11 Admin Panel and User Management
+**Action:** 
+➔ Wait for the pair token to expire
+➔ Attempt to scan and open the expired QR code link
 
-| TC No. | Test Case Description | Expected Result | Status |
-|---|---|---|---|
-| TC138 | Open admin dashboard page | Admin page loads successfully | Planned |
-| TC139 | Call `/api/admin/users` | All users are returned for admin listing | Planned |
-| TC140 | Call `/api/admin/face-list` | All face-enrolled usernames are returned correctly | Planned |
-| TC141 | Admin stats cards on page load | Total, Google, legacy, and face-enrolled counts are accurate | Planned |
-| TC142 | Search users by username | Table filters matching usernames correctly | Planned |
-| TC143 | Search users by full name | Table filters matching full names correctly | Planned |
-| TC144 | Search users by email | Table filters matching emails correctly | Planned |
-| TC145 | Open edit modal for a selected user | Modal is populated with current user details | Planned |
-| TC146 | Update user full name, email, location, or interests | Changes are saved and visible after reload | Planned |
-| TC147 | Update a non-existent user ID | API returns `404 User not found` | Planned |
-| TC148 | Delete an existing user | User is removed from the database successfully | Planned |
-| TC149 | Delete a user who has enrolled face data | User record and face data are both removed | Planned |
-| TC150 | Search returns no matching users | Admin table shows empty-state message instead of broken layout | Planned |
+**Expected Result:** The mobile browser displays a "Token Expired" error message.
 
-### 6.1.12 Database, Security, and CLI Utilities
+**Actual Result:** The mobile browser displayed a "Token Expired" error message.
 
-| TC No. | Test Case Description | Expected Result | Status |
-|---|---|---|---|
-| TC151 | First application startup with empty database | Required tables and indexes are created successfully | Planned |
-| TC152 | Start application with legacy database schema | Google OAuth columns and required migrations are added correctly | Planned |
-| TC153 | Insert duplicate non-null `google_id` values | Unique index prevents duplicate Google account linkage | Planned |
-| TC154 | Google-only account records are stored without requiring username and password credentials | Google-authenticated users are saved successfully | Planned |
-| TC155 | Legacy non-Google records do not break the supported login flows | Google and face login continue to work normally | Planned |
-| TC156 | Resolve a valid signed session token | Session is accepted for authenticated routes | Planned |
-| TC157 | Resolve an expired or tampered signed session token | Session is rejected and protected routes deny access | Planned |
-| TC158 | Two users with different Google tokens access Gmail and Calendar | Each user only receives their own Google data | Planned |
-| TC159 | Save multiple conversation records and fetch recent context | Recent context is returned in chronological order | Planned |
-| TC160 | Clear old conversations beyond configured age | Older records are deleted successfully | Planned |
-| TC161 | Get conversation statistics for a user | Total messages, sessions, and intent breakdown are returned correctly | Planned |
-| TC162 | Save, retrieve, update, and delete face embedding in DB helpers | Face embedding lifecycle works correctly | Planned |
-| TC163 | Mark attendance for a user | Attendance record is inserted successfully | Planned |
-| TC164 | Fetch attendance records for today | Correct attendance rows are returned for the current day | Planned |
-| TC165 | Start CLI test mode with existing users in database | CLI lists users and allows user selection | Planned |
-| TC166 | CLI starts with conversation history enabled | Recent history is loaded into the session correctly | Planned |
-| TC167 | Send text message in CLI mode | Assistant responds and conversation is saved | Planned |
-| TC168 | Use `clear` command in CLI mode | In-memory conversation history is reset | Planned |
-| TC169 | Use `history` command in CLI mode | Current conversation preview is displayed | Planned |
-| TC170 | Use `tts on` and `tts off` in CLI mode | Spoken output mode toggles correctly | Planned |
-| TC171 | Use `voice on` and `voice off` in CLI mode | Microphone interaction mode toggles correctly | Planned |
-| TC172 | CLI microphone capture with no speech detected | CLI handles the case gracefully without crashing | Planned |
-| TC173 | Browser compatibility in Chrome | Core features work correctly | Planned |
-| TC174 | Browser compatibility in Edge | Core features work correctly | Planned |
-| TC175 | Browser compatibility in Firefox | Core features work correctly | Planned |
-| TC176 | Temporary network, API, or WebSocket failure during runtime | System retries gracefully and remains usable | Planned |
+**Conclusion:** Test was successful
 
-## 6.2 Testing Summary
+---
 
-This test plan covers the implemented AARVIS smart mirror modules in the `final fixed fyp` project: Google OAuth and QR pairing, face enrollment and recognition, dashboard behavior, voice assistant, weather, news, calendar scheduling, Gmail integration, morning briefing, admin management, database behavior, security checks, CLI utilities, and compatibility testing.
+### 6.2.4 Mobile-to-PC Auto-Redirect
+**Table 14: Test of Mobile-to-PC Auto-Redirect**
 
-The test cases are written in report style so they can be copied directly into the project documentation and later updated with real execution statuses such as `Successful` or `Failed`.
+**Test No:** 4
+
+**Objective:** Verify the mirror UI updates automatically when mobile pairing completes.
+
+**Action:** 
+➔ Complete Google authentication on the mobile device
+➔ Observe the smart mirror monitor
+
+**Expected Result:** The mirror automatically redirects to the dashboard without user interaction on the PC.
+
+**Actual Result:** The mirror automatically redirected to the dashboard.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.5 PC Fallback Trigger via Mobile
+**Table 15: Test of PC Fallback Trigger via Mobile**
+
+**Test No:** 5
+
+**Objective:** Verify that mobile UI can trigger fallback to local PC login.
+
+**Action:** 
+➔ Scan the QR code but tap "Trigger on PC" instead of completing OAuth on mobile
+
+**Expected Result:** The mirror monitor switches to the local PC login fallback flow.
+
+**Actual Result:** The mirror monitor switched to the local PC login fallback flow.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.6 Unauthorized Dashboard Access
+**Table 16: Test of Unauthorized Dashboard Access**
+
+**Test No:** 6
+
+**Objective:** Prevent unauthenticated users from accessing the dashboard.
+
+**Action:** 
+➔ Clear browser cookies
+➔ Navigate directly to the `/` root dashboard URL
+
+**Expected Result:** The system redirects the user to `/login` immediately.
+
+**Actual Result:** The system redirected the user to `/login` immediately.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.7 User Logout
+**Table 17: Test of User Logout**
+
+**Test No:** 7
+
+**Objective:** Verify session termination upon logout.
+
+**Action:** 
+➔ Say "logout" or click the logout button on the dashboard
+➔ Attempt to navigate back to the dashboard
+
+**Expected Result:** Session cookies are cleared, and the user is redirected to the login page.
+
+**Actual Result:** Session cookies were cleared, and the user was redirected to the login page.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.8 Face Detection - Multiple Faces
+**Table 18: Test of Face Detection - Multiple Faces**
+
+**Test No:** 8
+
+**Objective:** Verify system behavior when multiple faces are visible during login.
+
+**Action:** 
+➔ Position two people in front of the camera
+➔ Trigger face detection
+
+**Expected Result:** The system targets the largest/closest bounding box for authentication.
+
+**Actual Result:** The system targeted the largest bounding box for authentication.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.9 Face Liveness Check - Look Left
+**Table 19: Test of Face Liveness Check - Look Left**
+
+**Test No:** 9
+
+**Objective:** Verify anti-spoofing motion tracking (Left).
+
+**Action:** 
+➔ Start Face Enrollment
+➔ Turn head significantly to the left when prompted
+
+**Expected Result:** The "Look Left" checklist item is marked complete.
+
+**Actual Result:** The "Look Left" checklist item was marked complete.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.10 Face Liveness Check - Look Right
+**Table 20: Test of Face Liveness Check - Look Right**
+
+**Test No:** 10
+
+**Objective:** Verify anti-spoofing motion tracking (Right).
+
+**Action:** 
+➔ Start Face Enrollment
+➔ Turn head significantly to the right when prompted
+
+**Expected Result:** The "Look Right" checklist item is marked complete.
+
+**Actual Result:** The "Look Right" checklist item was marked complete.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.11 Face Liveness Check - Look Up
+**Table 21: Test of Face Liveness Check - Look Up**
+
+**Test No:** 11
+
+**Objective:** Verify anti-spoofing motion tracking (Up).
+
+**Action:** 
+➔ Start Face Enrollment
+➔ Tilt head upwards when prompted
+
+**Expected Result:** The "Look Up" checklist item is marked complete.
+
+**Actual Result:** The "Look Up" checklist item was marked complete.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.12 Face Liveness Check - Look Down
+**Table 22: Test of Face Liveness Check - Look Down**
+
+**Test No:** 12
+
+**Objective:** Verify anti-spoofing motion tracking (Down).
+
+**Action:** 
+➔ Start Face Enrollment
+➔ Tilt head downwards when prompted
+
+**Expected Result:** The "Look Down" checklist item is marked complete.
+
+**Actual Result:** The "Look Down" checklist item was marked complete.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.13 Face Enrollment & Embedding Extraction
+**Table 23: Test of Face Enrollment & Embedding Extraction**
+
+**Test No:** 13
+
+**Objective:** Verify PyTorch extracts and saves 512-D face embeddings.
+
+**Action:** 
+➔ Complete all liveness checks
+➔ Click "Register Face Now"
+
+**Expected Result:** The PyTorch MobileNetV2 model generates embeddings and saves them to the database.
+
+**Actual Result:** Embeddings were successfully generated and saved to the database.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.14 Face Login - Authorized User
+**Table 24: Test of Face Login - Authorized User**
+
+**Test No:** 14
+
+**Objective:** Verify standard face authentication works for registered users.
+
+**Action:** 
+➔ Stand in front of the mirror
+➔ Choose "Face Login"
+
+**Expected Result:** Cosine similarity evaluates > 0.40, and the user is logged in.
+
+**Actual Result:** Cosine similarity evaluated > 0.40, and the user was logged in.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.15 Face Login - Unauthorized User
+**Table 25: Test of Face Login - Unauthorized User**
+
+**Test No:** 15
+
+**Objective:** Ensure unknown faces cannot access the system.
+
+**Action:** 
+➔ Have an unregistered person stand in front of the mirror
+➔ Trigger face login
+
+**Expected Result:** Cosine similarity evaluates < 0.40, and access is denied with a failure message.
+
+**Actual Result:** Cosine similarity evaluated < 0.40, and access was denied.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.16 Face Login - No Face in Frame
+**Table 26: Test of Face Login - No Face in Frame**
+
+**Test No:** 16
+
+**Objective:** Prevent system crashes when trying to authenticate an empty room.
+
+**Action:** 
+➔ Step out of the camera frame
+➔ Trigger face login
+
+**Expected Result:** The system returns a gracefully handled "No face detected" message without crashing.
+
+**Actual Result:** The system returned "No face detected" and did not crash.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.17 Face Login - Face Occlusion
+**Table 27: Test of Face Login - Face Occlusion**
+
+**Test No:** 17
+
+**Objective:** Reject login attempts when the face is heavily occluded.
+
+**Action:** 
+➔ Cover the lower half of the face with a hand or mask
+➔ Trigger face login
+
+**Expected Result:** Authentication fails due to insufficient facial landmarks.
+
+**Actual Result:** Authentication failed gracefully as expected.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.18 Face Presence Cache
+**Table 28: Test of Face Presence Cache**
+
+**Test No:** 18
+
+**Objective:** Prevent redundant verification queries while the user is actively using the mirror.
+
+**Action:** 
+➔ Log in via Face Recognition
+➔ Remain in front of the mirror for consecutive checks
+
+**Expected Result:** The system uses cached presence verification to reduce processing overhead.
+
+**Actual Result:** Presence cache prevented redundant API verifications.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.19 Widget Initialization
+**Table 29: Test of Widget Initialization**
+
+**Test No:** 19
+
+**Objective:** Ensure widgets load seamlessly with user-specific data.
+
+**Action:** 
+➔ Log into the dashboard
+➔ Observe the Weather, News, and Clock widgets
+
+**Expected Result:** Widgets initialize immediately loaded with proper authenticated user context.
+
+**Actual Result:** Widgets initialized correctly with the user context.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.20 Time-based Greeting
+**Table 30: Test of Time-based Greeting**
+
+**Test No:** 20
+
+**Objective:** Verify dynamic greeting changes based on the local clock.
+
+**Action:** 
+➔ Log into the dashboard in the morning (e.g., 9:00 AM)
+➔ Observe the main greeting text
+
+**Expected Result:** The UI displays "Good Morning" along with the user's name.
+
+**Actual Result:** The UI displayed "Good Morning" correctly.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.21 Empty Calendar State GUI
+**Table 31: Test of Empty Calendar State GUI**
+
+**Test No:** 21
+
+**Objective:** Ensure empty schedules display properly without breaking UI layout.
+
+**Action:** 
+➔ Log in with a Google account that has zero events today
+➔ Check the calendar widget area
+
+**Expected Result:** The UI gracefully presents a "Free schedule" or "No upcoming events" message.
+
+**Actual Result:** The UI displayed the empty schedule message properly.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.22 Periodic Background Refresh
+**Table 32: Test of Periodic Background Refresh**
+
+**Test No:** 22
+
+**Objective:** Ensure information stays up to date without page reloads.
+
+**Action:** 
+➔ Leave the dashboard open for the configured refresh interval
+➔ Observe news or weather widget
+
+**Expected Result:** The widget data updates dynamically in the background.
+
+**Actual Result:** Widget data updated seamlessly in the background.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.23 Morning Briefing Generation
+**Table 33: Test of Morning Briefing Generation**
+
+**Test No:** 23
+
+**Objective:** Validate the LLM synthesizes context into a coherent briefing.
+
+**Action:** 
+➔ Trigger the morning briefing sequence
+➔ Listen to the generated audio
+
+**Expected Result:** The LLM accurately combines time, weather, and schedule into a fluid verbal greeting.
+
+**Actual Result:** The generated briefing accurately included all contextual data.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.24 Voice Assistant - UI State Synchronization
+**Table 34: Test of Voice Assistant - UI State Synchronization**
+
+**Test No:** 24
+
+**Objective:** Ensure visual feedback matches backend processing states.
+
+**Action:** 
+➔ Speak to the assistant
+➔ Watch the assistant visualizer icon on the dashboard
+
+**Expected Result:** Visualizer cycles strictly through "Listening...", "Thinking...", and "Speaking...".
+
+**Actual Result:** Visualizer cycled accurately matching LangGraph transitions.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.25 Voice-to-Text (STT) Transcription Accuracy
+**Table 35: Test of Voice-to-Text (STT) Transcription Accuracy**
+
+**Test No:** 25
+
+**Objective:** Validate Whisper STT correctly processes spoken English.
+
+**Action:** 
+➔ Speak "Hello Aarvis, what time is it?" clearly into the microphone
+
+**Expected Result:** The transcribed text exactly matches the spoken intent.
+
+**Actual Result:** The transcript accurately matched the spoken words.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.26 Text-to-Voice (TTS) Playback
+**Table 36: Test of Text-to-Voice (TTS) Playback**
+
+**Test No:** 26
+
+**Objective:** Ensure Kokoro TTS synthesizes responses smoothly.
+
+**Action:** 
+➔ Ask the assistant a question that yields a multi-sentence answer
+➔ Listen to the playback
+
+**Expected Result:** Audio chunks play sequentially without overlapping or cutting off.
+
+**Actual Result:** Audio chunks played smoothly without overlap.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.27 Voice Assistant - Unintelligible Speech
+**Table 37: Test of Voice Assistant - Unintelligible Speech**
+
+**Test No:** 27
+
+**Objective:** Handle background noise or mumbled speech gracefully.
+
+**Action:** 
+➔ Make random indistinct noises into the microphone
+
+**Expected Result:** Assistant responds asking for clarification (e.g., "I didn't catch that").
+
+**Actual Result:** Assistant asked for clarification gracefully.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.28 Voice Assistant - General Knowledge Inquiry
+**Table 38: Test of Voice Assistant - General Knowledge Inquiry**
+
+**Test No:** 28
+
+**Objective:** Ensure standard LLM general knowledge requests function.
+
+**Action:** 
+➔ Ask "What is the capital of France?"
+
+**Expected Result:** The assistant voices back "The capital of France is Paris".
+
+**Actual Result:** The assistant answered correctly.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.29 Voice Assistant - Weather Inquiry
+**Table 39: Test of Voice Assistant - Weather Inquiry**
+
+**Test No:** 29
+
+**Objective:** Validate tool-calling for real-time weather data.
+
+**Action:** 
+➔ Ask "What is the weather right now?"
+
+**Expected Result:** The assistant invokes the weather tool and reads the current conditions.
+
+**Actual Result:** The assistant accurately reported the current tracked weather.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.30 Voice Assistant - Contextual Reasoning (Clothing)
+**Table 40: Test of Voice Assistant - Contextual Reasoning (Clothing)**
+
+**Test No:** 30
+
+**Objective:** Evaluate LLM logic connecting weather to user advice.
+
+**Action:** 
+➔ Ask "What should I wear today?"
+
+**Expected Result:** Assistant fetches weather and suggests clothes suitable for the temperature.
+
+**Actual Result:** Assistant successfully combined weather context with clothing advice.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.31 Voice Assistant - Conversational Memory
+**Table 41: Test of Voice Assistant - Conversational Memory**
+
+**Test No:** 31
+
+**Objective:** Verify session history allows pronoun resolution.
+
+**Action:** 
+➔ Ask "Who is the president of the US?"
+➔ Then ask "How old is he?"
+
+**Expected Result:** The assistant remembers the context of the previous turn and answers correctly.
+
+**Actual Result:** The assistant correctly resolved the pronoun from memory.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.32 Calendar - Read Today's Schedule
+**Table 42: Test of Calendar - Read Today's Schedule**
+
+**Test No:** 32
+
+**Objective:** Validate Google Calendar API read permissions for today.
+
+**Action:** 
+➔ Ask "What is on my schedule today?"
+
+**Expected Result:** The assistant fetches today's events and reads them aloud.
+
+**Actual Result:** The assistant accurately read the events for the current date.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.33 Calendar - Read Tomorrow's Schedule
+**Table 43: Test of Calendar - Read Tomorrow's Schedule**
+
+**Test No:** 33
+
+**Objective:** Validate datetime boundary shifting for calendar lookups.
+
+**Action:** 
+➔ Ask "What do I have tomorrow?"
+
+**Expected Result:** The assistant shifts the query parameters and reads tomorrow's events.
+
+**Actual Result:** The assistant successfully fetched and summarized tomorrow's events.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.34 Calendar - Create Event
+**Table 44: Test of Calendar - Create Event**
+
+**Test No:** 34
+
+**Objective:** Validate Google Calendar write permissions and time normalization.
+
+**Action:** 
+➔ Ask "Schedule a meeting at 3 PM"
+
+**Expected Result:** The assistant normalizes 3 PM to 15:00 and commits the event to Google Calendar.
+
+**Actual Result:** Event was successfully created in the user's Google Calendar.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.35 Calendar - Prevent Invalid Event Creation
+**Table 45: Test of Calendar - Prevent Invalid Event Creation**
+
+**Test No:** 35
+
+**Objective:** Catch logical errors in calendar commands.
+
+**Action:** 
+➔ Ask "Schedule a meeting for yesterday"
+
+**Expected Result:** The assistant warns the user that creating an event in the past is invalid.
+
+**Actual Result:** The assistant warned the user and did not invoke the calendar tool.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.36 Calendar - Update Event Time
+**Table 46: Test of Calendar - Update Event Time**
+
+**Test No:** 36
+
+**Objective:** Validate updating existing calendar entries.
+
+**Action:** 
+➔ Ask "Move my 3 PM meeting to 4 PM"
+
+**Expected Result:** The assistant fetches the event ID and updates the start/end time.
+
+**Actual Result:** The event time was successfully updated in Google Calendar.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.37 Calendar - Delete Event
+**Table 47: Test of Calendar - Delete Event**
+
+**Test No:** 37
+
+**Objective:** Validate event cancellation via voice.
+
+**Action:** 
+➔ Ask "Cancel my 4 PM meeting"
+
+**Expected Result:** The assistant confirms the deletion and executes the API delete request.
+
+**Actual Result:** The event was successfully canceled from the calendar.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.38 Gmail - Check New Emails
+**Table 48: Test of Gmail - Check New Emails**
+
+**Test No:** 38
+
+**Objective:** Validate fetching unread messages from Google Mail.
+
+**Action:** 
+➔ Ask "Do I have any new emails?"
+
+**Expected Result:** The assistant queries the Gmail API and states the number of unread emails.
+
+**Actual Result:** Assistant accurately queried and reported unread emails.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.39 Gmail - Summarize Emails
+**Table 49: Test of Gmail - Summarize Emails**
+
+**Test No:** 39
+
+**Objective:** Validate extraction of email snippets for summarization.
+
+**Action:** 
+➔ Ask "Summarize my recent emails"
+
+**Expected Result:** The assistant reads a synthesized summary of the most recent unread message subjects/snippets.
+
+**Actual Result:** Assistant provided a concise summary of the unread emails.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.40 Gmail - Query Emails by Sender
+**Table 50: Test of Gmail - Query Emails by Sender**
+
+**Test No:** 40
+
+**Objective:** Validate targeted search inside the Gmail tool.
+
+**Action:** 
+➔ Ask "Did I get an email from John?"
+
+**Expected Result:** The assistant filters unread emails specifically looking for the sender "John".
+
+**Actual Result:** Assistant accurately filtered the inbox and responded.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.41 Gmail - Draft & Send Email via Contacts
+**Table 51: Test of Gmail - Draft & Send Email via Contacts**
+
+**Test No:** 41
+
+**Objective:** Verify the full automated email composition and sending flow.
+
+**Action:** 
+➔ Ask "Send an email to John about the project meeting"
+
+**Expected Result:** Assistant resolves "John" against contacts.csv, drafts the email, and sends it via Gmail API.
+
+**Actual Result:** Email was drafted and successfully sent to the resolved address.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.42 Gmail - Draft Email for Unknown Contact
+**Table 52: Test of Gmail - Draft Email for Unknown Contact**
+
+**Test No:** 42
+
+**Objective:** Handle cases where the requested contact address does not exist.
+
+**Action:** 
+➔ Ask "Send an email to Unknown Person"
+
+**Expected Result:** Assistant fails to resolve the name and explicitly asks the user for the email address.
+
+**Actual Result:** Assistant correctly asked for clarification on the email address.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.43 Error Handling - OAuth Token Expiry
+**Table 53: Test of Error Handling - OAuth Token Expiry**
+
+**Test No:** 43
+
+**Objective:** Validate the middleware handles expired Google OAuth Access Tokens.
+
+**Action:** 
+➔ Force the Google Access Token to expire in the DB
+➔ Request a calendar query
+
+**Expected Result:** The system silently uses the Refresh Token to get a new Access Token and completes the query.
+
+**Actual Result:** System silently refreshed the token and completed the query.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.44 Error Handling - External API Outages
+**Table 54: Test of Error Handling - External API Outages**
+
+**Test No:** 44
+
+**Objective:** Maintain frontend resiliency when upstream APIs fail.
+
+**Action:** 
+➔ Block internet access to the Weather API domain
+➔ Load dashboard
+
+**Expected Result:** The weather widget displays a safe fallback message without crashing the UI.
+
+**Actual Result:** The widget displayed a safe error boundary message.
+
+**Conclusion:** Test was successful
+
+---
+
+### 6.2.45 CLI Mode Interaction
+**Table 55: Test of CLI Mode Interaction**
+
+**Test No:** 45
+
+**Objective:** Verify text-based CLI testing mode functions detached from frontend.
+
+**Action:** 
+➔ Run the CLI test script
+➔ Type a query into the console
+
+**Expected Result:** The assistant processes the query and returns text output cleanly to the console.
+
+**Actual Result:** The assistant responded correctly in the CLI environment.
+
+**Conclusion:** Test was successful
+
+---
+

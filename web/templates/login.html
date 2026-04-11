@@ -11,6 +11,29 @@
             display: flex; overflow: hidden;
         }
 
+        /* Re-auth mode: show only QR reconnect panel */
+        body.reauth-only {
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            overflow: auto;
+        }
+        body.reauth-only .cam-panel {
+            display: none;
+        }
+        body.reauth-only .qr-panel {
+            width: min(94vw, 560px);
+            min-height: 420px;
+            border-left: none;
+            border: 1px solid rgba(255,255,255,.12);
+            border-radius: 14px;
+            background: rgba(255,255,255,.06);
+            box-shadow: 0 20px 48px rgba(0,0,0,.35);
+        }
+        body.reauth-only .new-user-link {
+            display: none;
+        }
+
         /* ── Left: full camera panel ── */
         .cam-panel {
             flex: 1; position: relative; display: flex;
@@ -101,6 +124,18 @@
             font-size: 11px; color: rgba(255,255,255,.4);
             text-align: center; line-height: 1.6;
         }
+        .reauth-banner {
+            display: none;
+            width: 100%;
+            padding: 8px 10px;
+            border-radius: 8px;
+            background: rgba(255, 173, 66, 0.14);
+            border: 1px solid rgba(255, 173, 66, 0.35);
+            color: #ffcf8a;
+            font-size: 11px;
+            text-align: center;
+            line-height: 1.5;
+        }
         #qrcode { 
             border-radius: 10px; 
             overflow: hidden;
@@ -136,14 +171,14 @@
 
             <div class="cam-bottom">
                 <div class="alt-strip">
-                    <a href="/auth/google?intent=login" class="btn-google-small">
+                    <a href="/auth/google?intent=login" class="btn-google-small" id="googlePcBtn">
                         <svg width="16" height="16" viewBox="0 0 48 48">
                             <path fill="#4285F4" d="M44.5 20H24v8.5h11.7C34.2 33.3 29.6 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l6-6C34.5 6.5 29.6 4.5 24 4.5 12.7 4.5 3.5 13.7 3.5 25S12.7 45.5 24 45.5c11 0 20.5-8 20.5-20.5 0-1.4-.1-2.7-.5-5z"/>
                             <path fill="#34A853" d="M6.3 14.7l7 5.1C15.1 17 19.3 14 24 14c3.1 0 5.9 1.2 8 3.1l6-6C34.5 6.5 29.6 4.5 24 4.5c-7.6 0-14.2 4.3-17.7 10.2z"/>
                             <path fill="#FBBC05" d="M24 45.5c5.5 0 10.4-1.9 14.2-5.1l-6.6-5.4C29.6 36.8 27 37.5 24 37.5c-5.5 0-10.2-3.6-11.8-8.6l-7 5.4C8.3 41.4 15.5 45.5 24 45.5z"/>
                             <path fill="#EA4335" d="M44.5 20H24v8.5h11.7c-.8 2.3-2.3 4.2-4.3 5.5l6.6 5.4c3.9-3.6 6-8.9 6-15.4 0-1.4-.1-2.7-.5-5z"/>
                         </svg>
-                        Sign in with Google
+                        <span id="googlePcBtnText">Sign in with Google</span>
                     </a>
                 </div>
                 <div class="footer-tip">New user? <a href="/register">Start with Google on the register page</a></div>
@@ -153,8 +188,9 @@
 
     <!-- QR panel -->
     <div class="qr-panel">
-        <div class="title">Sign in from phone</div>
-        <div class="sub">Same Wi-Fi — scan to continue Google sign-in on your phone</div>
+        <div class="title" id="qrPanelTitle">Sign in from phone</div>
+        <div class="sub" id="qrPanelSub">Same Wi-Fi — scan to continue Google sign-in on your phone</div>
+        <div class="reauth-banner" id="reauthBanner">Google access expired. Reconnect your account from this QR code.</div>
         <div id="qrcode"></div>
         <div class="qr-url" id="qrUrl"></div>
         <div class="pair-ok" id="pairOk">&#10003; Phone connected!<br>Loading…</div>
@@ -164,6 +200,7 @@
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <script>
         localStorage.removeItem('sessionToken');
+        const IS_REAUTH_MODE = new URLSearchParams(window.location.search).get('reauth') === 'google';
 
         // ── Face login (auto-start) ─────────────────────────────────────
         let faceStream = null, faceInterval = null;
@@ -217,6 +254,22 @@
         const PAIR_TOKEN = '{{ pair_token }}';
         const QR_URL = '{{ qr_url or "" }}';
         let pairPollInterval = null;
+
+        function applyReauthMode() {
+            if (!IS_REAUTH_MODE) return;
+
+            const title = document.getElementById('qrPanelTitle');
+            const sub = document.getElementById('qrPanelSub');
+            const banner = document.getElementById('reauthBanner');
+            const btnText = document.getElementById('googlePcBtnText');
+
+            document.body.classList.add('reauth-only');
+
+            if (title) title.textContent = 'Reconnect Google from phone';
+            if (sub) sub.textContent = 'Scan to re-authorize Gmail and Calendar access for this mirror account';
+            if (banner) banner.style.display = 'block';
+            if (btnText) btnText.textContent = 'Reconnect Google on this PC';
+        }
 
         async function initQR() {
             try {
@@ -273,7 +326,10 @@
             } catch(e) {}
         }
 
-        startFace();
+        applyReauthMode();
+        if (!IS_REAUTH_MODE) {
+            startFace();
+        }
         initQR();
         pairPollInterval = setInterval(pollPair, 1500);
     </script>
