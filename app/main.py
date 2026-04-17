@@ -12,6 +12,7 @@ import ipaddress
 import urllib.request
 import urllib.error
 import urllib.parse
+import xml.etree.ElementTree as ET
 from typing import Optional
 import secrets
 import cv2
@@ -1707,6 +1708,91 @@ def _build_news_url(api_key: str, interests: str | None, location: str | None) -
     query = urllib.parse.quote_plus(" ".join(query_terms) if query_terms else "world")
     return f"https://newsapi.org/v2/everything?q={query}&sortBy=publishedAt&language=en&apiKey={api_key}"
 
+
+def _build_google_news_rss_url(interests: str | None, location: str | None) -> str:
+    """Build a Google News RSS URL without requiring an API key."""
+    interest_list = [i.strip() for i in (interests or "").split(",") if i.strip()]
+    primary_interest = interest_list[0] if interest_list else ""
+    query_terms = [t for t in [primary_interest, location] if t]
+    query_text = " ".join(query_terms).strip() or "world"
+    query = urllib.parse.quote_plus(query_text)
+    return f"https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en"
+
+
+def _extract_rss_titles(xml_text: str, limit: int = 5) -> list[dict[str, str]]:
+    """Parse RSS feed text and return title dictionaries for UI consumers."""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return []
+
+    articles: list[dict[str, str]] = []
+
+    for item in root.iter():
+        if not item.tag.endswith("item"):
+            continue
+
+        title_text = ""
+        for child in item:
+            if child.tag.endswith("title") and child.text:
+                title_text = child.text.strip()
+                break
+
+        if title_text:
+            articles.append({"title": title_text})
+            if len(articles) >= limit:
+                break
+
+    return articles
+
+
+async def _fetch_news_articles(interests: str | None, location: str | None, limit: int = 5) -> list[dict[str, str]]:
+    """Fetch news with NewsAPI first, then fallback to Google News RSS."""
+    import httpx
+
+    news_api_key = os.getenv("NEWS_API_KEY", "").strip() or "b47750eb5d3a45cda2f4542d117a42e8"
+
+    # Primary source: NewsAPI.
+    news_url = _build_news_url(news_api_key, interests=interests, location=location)
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.get(news_url)
+
+        if response.status_code == 200:
+            payload = response.json()
+            if payload.get("status") == "ok":
+                articles = [
+                    {"title": article["title"].strip()}
+                    for article in payload.get("articles", [])
+                    if article.get("title")
+                ]
+                if articles:
+                    return articles[:limit]
+            else:
+                print(f"[News] NewsAPI error payload: {payload.get('code')} - {payload.get('message')}")
+        else:
+            print(f"[News] NewsAPI HTTP {response.status_code}")
+    except Exception as exc:
+        print(f"[News] NewsAPI request failed: {exc}")
+
+    # Fallback source: Google News RSS.
+    rss_url = _build_google_news_rss_url(interests=interests, location=location)
+    try:
+        async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
+            response = await client.get(rss_url)
+
+        if response.status_code == 200 and response.text:
+            rss_articles = _extract_rss_titles(response.text, limit=limit)
+            if rss_articles:
+                print("[News] Served headlines via Google News RSS fallback")
+                return rss_articles
+        else:
+            print(f"[News] RSS fallback HTTP {response.status_code}")
+    except Exception as exc:
+        print(f"[News] RSS fallback failed: {exc}")
+
+    return []
+
 @app.get("/api/weather")
 async def get_weather(session_token: Optional[str] = Cookie(None)):
     """Get weather data from WeatherAPI.com based on user's location"""
@@ -1774,8 +1860,7 @@ async def get_weather(session_token: Optional[str] = Cookie(None)):
 @app.get("/api/news")
 async def get_news(session_token: Optional[str] = Cookie(None)):
     """Get top headlines from NewsAPI.org based on user interests"""
-    import httpx
-    
+
     # Get user's interests and location
     interests = None
     location = None
@@ -1786,26 +1871,20 @@ async def get_news(session_token: Optional[str] = Cookie(None)):
             interests = user['interests']
         if user and user.get('location'):
             location = user['location']
-    
-    API_KEY = "b47750eb5d3a45cda2f4542d117a42e8"
-    url = _build_news_url(API_KEY, interests=interests, location=location)
-    
+
     try:
         news_started = time.perf_counter()
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(url)
-            data = response.json()
+        articles = await _fetch_news_articles(interests=interests, location=location, limit=5)
         print(f"[TIMING] News upstream in {_elapsed_ms(news_started):.0f} ms")
-        
-        if data.get("status") == "ok" and data.get("articles"):
-            articles = [{"title": article["title"]} for article in data["articles"][:5]]
+
+        if articles:
             return articles
-        else:
-            return [{"title": "Unable to fetch news at this time"}]
+
+        return [{"title": "No news available right now. Please try again shortly."}]
     except Exception as e:
         print(f"[News] Error: {e}")
         return [
-            {"title": "⚠️ Unable to connect to news service"},
+            {"title": "Unable to connect to news service"},
             {"title": "Check your internet connection or firewall settings"},
             {"title": "The application will retry automatically"}
         ]
@@ -1986,14 +2065,10 @@ async def trigger_briefing(session_token: Optional[str] = Cookie(None)):
     news_text = "News unavailable."
     try:
         interests = user.get('interests', 'technology')
-        API_KEY_NEWS = "b47750eb5d3a45cda2f4542d117a42e8"
         location = user.get('location') or ''
-        news_url = _build_news_url(API_KEY_NEWS, interests=interests, location=location)
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(news_url)
-            nd = resp.json()
-            if nd.get("status") == "ok":
-                news_text = "; ".join([a["title"] for a in nd.get("articles", [])[:3]])
+        news_articles = await _fetch_news_articles(interests=interests, location=location, limit=3)
+        if news_articles:
+            news_text = "; ".join([a["title"] for a in news_articles])
     except Exception:
         pass
 

@@ -7,6 +7,7 @@ import httpx
 import csv
 import os
 import urllib.parse
+import xml.etree.ElementTree as ET
 
 # ── Contacts CSV helper ────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -222,9 +223,9 @@ def get_weather(location: str) -> str:
 
 
 @tool
-def get_news(interests: str, location: str = "") -> str:
+def get_news(interests: str = "technology", location: str = "") -> str:
     """Get latest news headlines. Optionally pass user's location for region-relevant coverage."""
-    API_KEY = "b47750eb5d3a45cda2f4542d117a42e8"
+    api_key = os.getenv("NEWS_API_KEY", "").strip() or "b47750eb5d3a45cda2f4542d117a42e8"
     interest_list = [i.strip().lower() for i in (interests or "").split(',') if i.strip()]
     valid_categories = ['business', 'entertainment', 'health', 'science', 'sports', 'technology']
     primary_interest = interest_list[0] if interest_list else ""
@@ -232,26 +233,62 @@ def get_news(interests: str, location: str = "") -> str:
     country_code = _infer_news_country_code(location)
 
     if category and country_code:
-        url = f"https://newsapi.org/v2/top-headlines?country={country_code}&category={category}&apiKey={API_KEY}"
+        url = f"https://newsapi.org/v2/top-headlines?country={country_code}&category={category}&apiKey={api_key}"
     elif category:
         query = urllib.parse.quote_plus(f"{category} {location or ''}".strip() or category)
-        url = f"https://newsapi.org/v2/everything?q={query}&sortBy=publishedAt&language=en&apiKey={API_KEY}"
+        url = f"https://newsapi.org/v2/everything?q={query}&sortBy=publishedAt&language=en&apiKey={api_key}"
     elif country_code and not primary_interest:
-        url = f"https://newsapi.org/v2/top-headlines?country={country_code}&apiKey={API_KEY}"
+        url = f"https://newsapi.org/v2/top-headlines?country={country_code}&apiKey={api_key}"
     else:
         query_text = " ".join([p for p in [primary_interest, location] if p]) or "world"
         query = urllib.parse.quote_plus(query_text)
-        url = f"https://newsapi.org/v2/everything?q={query}&sortBy=publishedAt&language=en&apiKey={API_KEY}"
+        url = f"https://newsapi.org/v2/everything?q={query}&sortBy=publishedAt&language=en&apiKey={api_key}"
 
+    diagnostics = []
+
+    # Primary source: NewsAPI
     try:
         response = httpx.get(url, timeout=10.0)
         data = response.json()
         if data.get("status") == "ok" and data.get("articles"):
             headlines = [a["title"] for a in data["articles"][:5]]
             return "Top headlines:\n" + "\n".join(f"- {h}" for h in headlines)
-        return "Could not fetch news at this time."
+        diagnostics.append(f"newsapi:{data.get('code', 'no_data')}")
     except Exception as e:
-        return f"News fetch failed: {e}"
+        diagnostics.append(f"newsapi_error:{e}")
+
+    # Fallback source: Google News RSS (no key required)
+    query_text = " ".join([p for p in [primary_interest, location] if p]) or "world"
+    rss_query = urllib.parse.quote_plus(query_text)
+    rss_url = f"https://news.google.com/rss/search?q={rss_query}&hl=en-US&gl=US&ceid=US:en"
+
+    try:
+        rss_response = httpx.get(rss_url, timeout=10.0, follow_redirects=True)
+        if rss_response.status_code == 200 and rss_response.text:
+            root = ET.fromstring(rss_response.text)
+            headlines = []
+            for item in root.iter():
+                if not item.tag.endswith("item"):
+                    continue
+                for child in item:
+                    if child.tag.endswith("title") and child.text:
+                        title = child.text.strip()
+                        if title:
+                            headlines.append(title)
+                        break
+                if len(headlines) >= 5:
+                    break
+
+            if headlines:
+                return "Top headlines:\n" + "\n".join(f"- {h}" for h in headlines)
+
+        diagnostics.append(f"rss_http:{rss_response.status_code}")
+    except Exception as e:
+        diagnostics.append(f"rss_error:{e}")
+
+    if diagnostics:
+        return f"Could not fetch news at this time. ({diagnostics[0]})"
+    return "Could not fetch news at this time."
 
 
 @tool

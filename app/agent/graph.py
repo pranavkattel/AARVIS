@@ -46,7 +46,8 @@ STRICT RULES YOU MUST FOLLOW:
 8. If unsure what the user wants, ASK — do not guess.
 9. Calendar tools return event_id values. Remember them — you need event_id to update or delete events.
 10. Do NOT wrap your response in <think> tags or output any internal reasoning.
-11. For ALL email sending requests — whether the user wants you to write it for them ('write an email to John saying he is fired') OR provides explicit content — use send_email. If the user only gives a topic, leave subject/body empty and it will auto-compose. If they give you the full content, pass subject and body directly."""
+11. For ALL email sending requests — whether the user wants you to write it for them ('write an email to John saying he is fired') OR provides explicit content — use send_email. If the user only gives a topic, leave subject/body empty and it will auto-compose. If they give you the full content, pass subject and body directly.
+12. If the user asks for news, headlines, or current events, call get_news exactly once in that turn. Use the user's stored interests/location from context when they do not specify a topic."""
 
 
 def model_call(state: AgentState) -> AgentState:
