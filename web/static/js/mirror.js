@@ -191,7 +191,7 @@ async function ensureVoiceServicesReady() {
 let _streamingText = '';
 
 // ──── TTS Audio Playback Queue ────
-// Queues base64 WAV chunks and plays them sequentially so sentences
+// Queues base64 audio chunks and plays them sequentially so sentences
 // don't overlap and they play in order even if they arrive while another is playing.
 const _ttsQueue = [];
 let _ttsPlaying = false;
@@ -319,7 +319,7 @@ function handleMessage(data) {
             }
             break;
         case 'tts_audio':
-            // Server-generated TTS audio (base64 WAV) — play in browser
+            // Server-generated TTS audio chunk (base64) — play in browser
             if (data.data) {
                 console.log('[TTS] Received audio chunk, queueing playback');
                 queueTTSAudio(data.data);

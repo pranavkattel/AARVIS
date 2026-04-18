@@ -11,12 +11,12 @@ langchain
 langchain-core
 langchain-ollama
 langchain-google-genai
+langchain-groq
 langgraph
 google-api-python-client
 google-auth-oauthlib
 google-auth-httplib2
 google-auth
-kokoro
 sounddevice
 dateparser
 faster-whisper
@@ -26,3 +26,4 @@ torch
 torchvision
 pillow
 huggingface-hub
+piper-tts

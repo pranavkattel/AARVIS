@@ -2087,7 +2087,7 @@ async def trigger_briefing(session_token: Optional[str] = Cookie(None)):
     response = llm.invoke([HumanMessage(content=prompt)])
     briefing_text = response.content
 
-    # Speak it via Kokoro TTS
+    # Speak it via configured TTS service
     try:
         from app.services.tts_service import speak_async
         await speak_async(briefing_text)

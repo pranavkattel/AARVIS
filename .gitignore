@@ -4,5 +4,4 @@ data/*.pickle
 .env
 __pycache__/
 *.pth 
-
-
+models/piper
