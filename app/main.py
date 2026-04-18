@@ -101,8 +101,33 @@ try:
     from insightface.app import FaceAnalysis
     from insightface.utils import face_align
     print("[DEBUG] Initializing InsightFace...")
-    face_app = FaceAnalysis(name='buffalo_sc', providers=['CPUExecutionProvider'])
-    face_app.prepare(ctx_id=-1, det_size=(640, 640))
+
+    def _prepare_insightface(instance):
+        # Different insightface versions accept providers on different methods.
+        prepare_attempts = [
+            {"ctx_id": -1, "det_size": (640, 640), "providers": ["CPUExecutionProvider"]},
+            {"ctx_id": -1, "det_size": (640, 640)},
+            {"ctx_id": 0, "det_size": (640, 640)},
+        ]
+        last_error = None
+        for kwargs in prepare_attempts:
+            try:
+                instance.prepare(**kwargs)
+                return
+            except TypeError as exc:
+                last_error = exc
+        if last_error is not None:
+            raise last_error
+
+    try:
+        face_app = FaceAnalysis(name='buffalo_sc', providers=['CPUExecutionProvider'])
+    except TypeError as exc:
+        if "providers" in str(exc):
+            face_app = FaceAnalysis(name='buffalo_sc')
+        else:
+            raise
+
+    _prepare_insightface(face_app)
     FACE_RECOGNITION_AVAILABLE = True
     print("[DEBUG] ✅ Face recognition ready!")
 except Exception as e:
@@ -360,6 +385,28 @@ print(f"[DEBUG] Calendar available: {CALENDAR_AVAILABLE}")
 app.mount("/static", StaticFiles(directory=str(WEB_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
 
+
+def render_template(name: str, request: Request, context: Optional[dict] = None, **kwargs):
+    """Compatibility wrapper for Starlette TemplateResponse API differences."""
+    merged_context = {"request": request}
+    if context:
+        merged_context.update(context)
+
+    try:
+        # Newer Starlette/FastAPI style.
+        return templates.TemplateResponse(
+            request=request,
+            name=name,
+            context=merged_context,
+            **kwargs,
+        )
+    except TypeError as exc:
+        # Older Starlette style.
+        message = str(exc)
+        if ("request" not in message) and ("multiple values" not in message):
+            raise
+        return templates.TemplateResponse(name, merged_context, **kwargs)
+
 # Session storage (in production, use Redis or database)
 sessions = {}
 SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL_SECONDS", "86400"))
@@ -565,7 +612,7 @@ async def home(
         _set_session_cookie(redirect, token)
         return redirect
 
-    return templates.TemplateResponse("index.html", {"request": request})
+    return render_template("index.html", request)
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
@@ -582,7 +629,11 @@ async def login_page(request: Request):
             print(f"[OAuthBroker] login pair create failed: {exc}")
 
     pair_sessions[pair_token] = pair_entry
-    return templates.TemplateResponse("login.html", {"request": request, "pair_token": pair_token, "qr_url": qr_url})
+    return render_template(
+        "login.html",
+        request,
+        {"pair_token": pair_token, "qr_url": qr_url},
+    )
 
 @app.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request):
@@ -599,7 +650,11 @@ async def register_page(request: Request):
             print(f"[OAuthBroker] register pair create failed: {exc}")
 
     pair_sessions[pair_token] = pair_entry
-    return templates.TemplateResponse("register.html", {"request": request, "pair_token": pair_token, "qr_url": qr_url})
+    return render_template(
+        "register.html",
+        request,
+        {"pair_token": pair_token, "qr_url": qr_url},
+    )
 
 @app.get("/setup-face", response_class=HTMLResponse)
 async def setup_face_page(
@@ -613,7 +668,7 @@ async def setup_face_page(
         redirect.delete_cookie(key="session_token", path="/")
         return redirect
 
-    response = templates.TemplateResponse("setup_face.html", {"request": request})
+    response = render_template("setup_face.html", request)
     if token and token != session_token:
         _set_session_cookie(response, token)
     return response
@@ -623,7 +678,7 @@ async def setup_face_page(
 
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_page(request: Request):
-    return templates.TemplateResponse("admin.html", {"request": request})
+    return render_template("admin.html", request)
 
 @app.get("/api/admin/users")
 async def admin_list_users():
@@ -941,7 +996,7 @@ async def voice_readiness(session_token: Optional[str] = Cookie(None)):
 
 @app.get("/pair-complete", response_class=HTMLResponse)
 async def pair_complete_page(request: Request, mode: str = "face_on_pc"):
-    return templates.TemplateResponse("pair_complete.html", {"request": request, "mode": mode})
+    return render_template("pair_complete.html", request, {"mode": mode})
 
 @app.get("/mobile-connect", response_class=HTMLResponse)
 async def mobile_connect(request: Request, pair: str = ""):
@@ -949,7 +1004,11 @@ async def mobile_connect(request: Request, pair: str = ""):
     if not pair or pair not in pair_sessions:
         return HTMLResponse("<h3 style='font-family:sans-serif;padding:40px'>QR code expired. Please refresh the register page on your PC and scan again.</h3>")
     intent = pair_sessions[pair].get("intent", "register")
-    return templates.TemplateResponse("mobile_pair.html", {"request": request, "pair_token": pair, "intent": intent})
+    return render_template(
+        "mobile_pair.html",
+        request,
+        {"pair_token": pair, "intent": intent},
+    )
 
 @app.post("/api/pair-trigger/{pair_token}")
 async def pair_trigger(pair_token: str):
@@ -1359,10 +1418,6 @@ async def websocket_endpoint(
                 "google authentication is incomplete or expired",
                 "refresh token is missing",
                 "credentials do not contain the necessary fields",
-                "mail server connection failed",
-                "couldn't send the email",
-                "could not send the email",
-                "send manually",
                 "please re-authenticate",
                 "reauthenticate your gmail account",
                 "reauthenticate your google account",
@@ -1495,10 +1550,6 @@ async def websocket_endpoint(
                         tool_name = str(event.get("name", "") or "")
                         tool_output = str(event.get("data", {}).get("output", "") or "")
                         if _is_google_reauth_hint(tool_output):
-                            google_reauth_required = True
-                        elif "send_email" in tool_name.lower() and "email failed to send" in tool_output.lower():
-                            # Fallback: force reconnect flow on explicit send_email failures
-                            # so the mirror recovers through QR instead of staying stuck.
                             google_reauth_required = True
 
                     # Capture token-by-token output from the LLM node

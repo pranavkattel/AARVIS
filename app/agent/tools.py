@@ -345,9 +345,6 @@ def send_email(to: str, topic: str, subject: str = "", body: str = "", additiona
     def _looks_like_google_auth_issue(err_text: str) -> bool:
         lowered = (err_text or "").lower()
         markers = [
-            "google",
-            "gmail",
-            "oauth",
             "refresh token",
             "missing refresh token",
             "missing gmail send permission",
@@ -355,6 +352,9 @@ def send_email(to: str, topic: str, subject: str = "", body: str = "", additiona
             "insufficientpermissions",
             "invalid_grant",
             "token has been expired or revoked",
+            "invalid credentials",
+            "unauthorized",
+            "401",
             "reauth",
             "re-auth",
             "credentials do not contain the necessary fields",
@@ -372,12 +372,34 @@ def send_email(to: str, topic: str, subject: str = "", body: str = "", additiona
         else:
             return f"Could not find an email address for '{to}' in contacts. Please provide a direct email address."
 
+    def _build_fallback_email(_topic: str, _subject: str, _context: str) -> tuple[str, str]:
+        fallback_subject = (_subject or _topic or "Message").strip()
+        fallback_subject = fallback_subject[:120] if fallback_subject else "Message"
+
+        context_block = _context.strip()
+        body_lines = [
+            f"Hi {recipient_label.split('(')[0].strip()},",
+            "",
+            f"I wanted to reach out regarding: {_topic.strip() or 'the requested topic'}.",
+        ]
+        if context_block:
+            body_lines.extend(["", f"Additional details: {context_block}"])
+        body_lines.extend([
+            "",
+            "Please let me know your thoughts.",
+            "",
+            "Best regards,",
+            "AARVIS",
+        ])
+        return fallback_subject, "\n".join(body_lines)
+
     # MODE 2: body already provided — send directly
     if body.strip():
         final_subject = subject.strip() or topic.strip().capitalize()
         final_body = body.strip()
     else:
         # MODE 1: auto-compose from topic
+        compose_error = None
         try:
             from langchain_ollama import ChatOllama
             from langchain_core.messages import HumanMessage, SystemMessage as SM
@@ -403,7 +425,14 @@ def send_email(to: str, topic: str, subject: str = "", body: str = "", additiona
                     final_body = composed[composed.index(line) + len(line):].strip()
                     break
         except Exception as e:
-            return f"Failed to compose email: {e}"
+            compose_error = e
+            final_subject, final_body = _build_fallback_email(topic, subject, additional_context)
+            print(f"[Email] Auto-compose unavailable; using fallback template. Reason: {e}")
+
+        if not final_body.strip():
+            final_subject, final_body = _build_fallback_email(topic, subject, additional_context)
+            if compose_error:
+                print("[Email] Empty compose output; fallback template applied.")
 
     # Send
     try:
