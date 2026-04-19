@@ -47,16 +47,37 @@ def ensure_server_up() -> None:
         ("GET", "/api/user", 401),
         ("POST", "/api/user/context", 401),
         ("GET", "/api/voice/readiness", 401),
+        ("GET", "/api/calendar/upcoming", 401),
+        ("GET", "/api/calendar/range?start=2026-04-19T00:00:00%2B05:45&end=2026-04-20T00:00:00%2B05:45", 401),
+        ("GET", "/api/calendar/events/not-a-real-event", 401),
+        ("POST", "/api/calendar/events", 401),
+        ("PUT", "/api/calendar/events/not-a-real-event", 401),
+        ("DELETE", "/api/calendar/events/not-a-real-event", 401),
+        ("GET", "/api/mail/inbox", 401),
+        ("GET", "/api/mail/message/not-a-real-message", 401),
+        ("POST", "/api/mail/send", 401),
         ("POST", "/api/briefing/trigger", 401),
-        ("POST", "/api/face/enroll", 401),
+        ("POST", "/api/face/enroll", 200),
     ],
 )
 def test_api_status_codes(method: str, path: str, expected_status: int) -> None:
     payload = None
     if method == "POST" and path == "/api/user/context":
         payload = {"location": "Kathmandu", "interests": "technology"}
+    elif method == "POST" and path == "/api/calendar/events":
+        payload = {
+            "summary": "Smoke Test Event",
+            "start_time": "2026-04-19T10:00:00+05:45",
+            "end_time": "2026-04-19T11:00:00+05:45",
+            "description": "Calendar smoke test",
+            "location": "Kathmandu",
+        }
+    elif method == "PUT" and path == "/api/calendar/events/not-a-real-event":
+        payload = {"summary": "Updated Event"}
+    elif method == "POST" and path == "/api/mail/send":
+        payload = {"to": "person@example.com", "subject": "Test", "body": "Hello"}
     elif method == "POST" and path == "/api/face/enroll":
-        payload = {"images": []}
+        payload = {"username": "unit-user", "images": []}
 
     response = _request(method, path, json=payload)
     assert response.status_code == expected_status

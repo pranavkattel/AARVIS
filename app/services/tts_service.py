@@ -34,9 +34,29 @@ _EMOJI_TTS_PATTERN = re.compile(
     flags=re.UNICODE,
 )
 
+_MARKDOWN_LINK_PATTERN = re.compile(r"\[([^\]]+)\]\([^)]+\)")
+_URL_PATTERN = re.compile(r"https?://\S+")
+_LIST_PREFIX_PATTERN = re.compile(r"(?m)^\s*[-*+]\s+")
+_QUOTE_PREFIX_PATTERN = re.compile(r"(?m)^\s*>+\s*")
+_HEADING_PREFIX_PATTERN = re.compile(r"(?m)^\s{0,3}#{1,6}\s*")
+_STANDALONE_DASH_PATTERN = re.compile(r"(?<!\w)-(?!\w)")
+_MARKUP_SYMBOL_PATTERN = re.compile(r"[*`~_|]")
+
 
 def _strip_emoji_for_tts(text: str) -> str:
     cleaned = _EMOJI_TTS_PATTERN.sub(" ", text)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned
+
+
+def _strip_markup_symbols_for_tts(text: str) -> str:
+    cleaned = _MARKDOWN_LINK_PATTERN.sub(r"\1", text)
+    cleaned = _URL_PATTERN.sub(" ", cleaned)
+    cleaned = _LIST_PREFIX_PATTERN.sub("", cleaned)
+    cleaned = _QUOTE_PREFIX_PATTERN.sub("", cleaned)
+    cleaned = _HEADING_PREFIX_PATTERN.sub("", cleaned)
+    cleaned = _STANDALONE_DASH_PATTERN.sub(" ", cleaned)
+    cleaned = _MARKUP_SYMBOL_PATTERN.sub(" ", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
     return cleaned
 
@@ -48,7 +68,8 @@ def _sanitize_text_for_tts(text: str) -> str:
     safe_text = "".join(
         ch if (ch == "\n" or ch == "\t" or ord(ch) >= 32) else " " for ch in safe_text
     )
-    return _strip_emoji_for_tts(safe_text)
+    safe_text = _strip_emoji_for_tts(safe_text)
+    return _strip_markup_symbols_for_tts(safe_text)
 
 
 def _parse_env_float(name: str) -> Optional[float]:

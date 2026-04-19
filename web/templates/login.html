@@ -201,6 +201,7 @@
     <script>
         localStorage.removeItem('sessionToken');
         const IS_REAUTH_MODE = new URLSearchParams(window.location.search).get('reauth') === 'google';
+        const AUTH_INTENT = IS_REAUTH_MODE ? 'reauth' : 'login';
 
         // ── Face login (auto-start) ─────────────────────────────────────
         let faceStream = null, faceInterval = null;
@@ -262,6 +263,7 @@
             const sub = document.getElementById('qrPanelSub');
             const banner = document.getElementById('reauthBanner');
             const btnText = document.getElementById('googlePcBtnText');
+            const googlePcBtn = document.getElementById('googlePcBtn');
 
             document.body.classList.add('reauth-only');
 
@@ -269,6 +271,7 @@
             if (sub) sub.textContent = 'Scan to re-authorize Gmail and Calendar access for this mirror account';
             if (banner) banner.style.display = 'block';
             if (btnText) btnText.textContent = 'Reconnect Google on this PC';
+            if (googlePcBtn) googlePcBtn.href = `/auth/google?intent=${AUTH_INTENT}`;
         }
 
         async function initQR() {
@@ -299,7 +302,7 @@
                     document.getElementById('pairOk').textContent = '\u2713 Phone requested PC fallback. Opening Google sign-in...';
                     document.getElementById('pairOk').style.display = 'block';
                     setTimeout(() => {
-                        window.location.href = `/auth/google?intent=login&pair=${PAIR_TOKEN}`;
+                        window.location.href = `/auth/google?intent=${AUTH_INTENT}&pair=${PAIR_TOKEN}`;
                     }, 650);
                     return;
                 }

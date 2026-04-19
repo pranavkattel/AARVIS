@@ -144,11 +144,8 @@
                     const data = await res.json();
                     finalUrl = data.url;
                 }
-                // Use the same broker/QR flow for PC button too, so both paths are identical.
-                const googleBtn = document.getElementById('googleBtn');
-                if (googleBtn) {
-                    googleBtn.href = finalUrl;
-                }
+                // Keep the PC button on direct local OAuth so successful register
+                // lands on /setup-face instead of pair-complete phone flow.
                 document.getElementById('qrUrl').textContent = finalUrl;
                 new QRCode(document.getElementById('qrcode'), {
                     text: finalUrl, width: 128, height: 128,

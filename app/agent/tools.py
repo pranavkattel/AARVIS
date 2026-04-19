@@ -1,6 +1,7 @@
 from pathlib import Path
 from langchain_core.tools import tool
 from app.calendar_service import get_todays_events, get_upcoming_events, add_event_simple, authenticate_google_calendar
+from app.database import get_user_news_preferences, update_user_news_preferences
 from app.services.google_oauth import GoogleReauthRequiredError
 from googleapiclient.errors import HttpError
 import httpx
@@ -12,6 +13,18 @@ import xml.etree.ElementTree as ET
 # ── Contacts CSV helper ────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONTACTS_CSV = PROJECT_ROOT / "data" / "contacts.csv"
+_current_username: str | None = None
+
+
+def set_current_user(username: str | None) -> None:
+    """Set active username for tools that need per-user preferences."""
+    global _current_username
+    _current_username = username
+
+
+def get_current_user() -> str | None:
+    """Return active username for the current agent session."""
+    return _current_username
 
 def lookup_contact(name: str) -> str | None:
     """Look up email address by name from contacts.csv. Case-insensitive."""
@@ -40,6 +53,7 @@ def _infer_news_country_code(location: str | None) -> str | None:
         "uk": "gb",
         "england": "gb",
         "india": "in",
+        "nepal": "np",
         "australia": "au",
         "canada": "ca",
         "france": "fr",
@@ -53,6 +67,38 @@ def _infer_news_country_code(location: str | None) -> str | None:
         if token in lowered:
             return code
     return None
+
+
+NEWSAPI_TOP_HEADLINES_COUNTRIES = {
+    "ar", "au", "at", "be", "br", "bg", "ca", "cn", "co", "cu", "cz", "eg", "fr", "de", "gr",
+    "hk", "hu", "in", "id", "ie", "il", "it", "jp", "lv", "lt", "my", "mx", "ma", "nl", "nz",
+    "ng", "no", "np", "ph", "pl", "pt", "ro", "ru", "sa", "rs", "sg", "sk", "si", "za", "kr", "se",
+    "ch", "tw", "th", "tr", "ae", "ua", "gb", "us", "ve"
+}
+
+NEWS_COUNTRY_QUERY_KEYWORDS = {
+    "np": "nepal",
+}
+
+
+def _resolve_country_query_text(country: str | None, country_code: str | None) -> str | None:
+    raw = (country or "").strip()
+    if raw and len(raw) > 2:
+        return raw
+    if country_code:
+        return NEWS_COUNTRY_QUERY_KEYWORDS.get(country_code, raw or country_code)
+    return raw or None
+
+
+def _normalize_news_country(country: str | None, location: str | None = None) -> str | None:
+    cleaned = (country or "").strip().lower()
+    if cleaned:
+        if len(cleaned) == 2 and cleaned.isalpha():
+            return cleaned
+        inferred = _infer_news_country_code(cleaned)
+        if inferred:
+            return inferred
+    return _infer_news_country_code(location)
 # ───────────────────────────────────────────────────────────────
 
 
@@ -223,64 +269,194 @@ def get_weather(location: str) -> str:
 
 
 @tool
-def get_news(interests: str = "technology", location: str = "") -> str:
-    """Get latest news headlines. Optionally pass user's location for region-relevant coverage."""
-    api_key = os.getenv("NEWS_API_KEY", "").strip() or "b47750eb5d3a45cda2f4542d117a42e8"
-    interest_list = [i.strip().lower() for i in (interests or "").split(',') if i.strip()]
-    valid_categories = ['business', 'entertainment', 'health', 'science', 'sports', 'technology']
-    primary_interest = interest_list[0] if interest_list else ""
-    category = primary_interest if primary_interest in valid_categories else None
-    country_code = _infer_news_country_code(location)
+def set_news_preferences(interests: str | None = None, country: str | None = None) -> str:
+    """Save personalized news interests and/or country for the current signed-in user."""
+    username = get_current_user()
+    if not username:
+        return "I could not determine the signed-in user to save news preferences."
 
-    if category and country_code:
-        url = f"https://newsapi.org/v2/top-headlines?country={country_code}&category={category}&apiKey={api_key}"
-    elif category:
-        query = urllib.parse.quote_plus(f"{category} {location or ''}".strip() or category)
-        url = f"https://newsapi.org/v2/everything?q={query}&sortBy=publishedAt&language=en&apiKey={api_key}"
-    elif country_code and not primary_interest:
-        url = f"https://newsapi.org/v2/top-headlines?country={country_code}&apiKey={api_key}"
-    else:
-        query_text = " ".join([p for p in [primary_interest, location] if p]) or "world"
-        query = urllib.parse.quote_plus(query_text)
-        url = f"https://newsapi.org/v2/everything?q={query}&sortBy=publishedAt&language=en&apiKey={api_key}"
+    clean_interests = interests.strip() if interests is not None else None
+    clean_country = country.strip() if country is not None else None
+
+    if clean_interests is None and clean_country is None:
+        return "Please provide at least one value: interests or country."
+
+    normalized_country = clean_country
+    if clean_country is not None and clean_country != "":
+        normalized_country = _normalize_news_country(clean_country)
+        if not normalized_country:
+            return "I could not recognize that country. Please provide a country name or 2-letter code (for example: Nepal or NP)."
+
+    try:
+        updated = update_user_news_preferences(
+            username,
+            news_interests=clean_interests,
+            news_country=normalized_country,
+        )
+        if not updated:
+            return "I could not save your news preferences right now."
+
+        saved = get_user_news_preferences(username) or {}
+        saved_interests = (saved.get("news_interests") or "").strip()
+        saved_country = (saved.get("news_country") or "").strip()
+        return (
+            "Saved your news preferences. "
+            f"Interests: {saved_interests or 'none'}. Country: {saved_country or 'none'}."
+        )
+    except Exception as ex:
+        return f"Could not save news preferences: {ex}"
+
+
+@tool
+def get_news(
+    personalized: bool = False,
+    interests: str | None = None,
+    location: str | None = None,
+    country: str | None = None,
+) -> str:
+    """Get latest news with details (source, time, summary, link). Defaults to world news unless user-specific filters are provided."""
+    api_key = os.getenv("NEWS_API_KEY", "").strip() or "b47750eb5d3a45cda2f4542d117a42e8"
+
+    selected_interests = (interests or "").strip()
+    selected_location = (location or "").strip()
+    selected_country = (country or "").strip()
+    has_explicit_filters = bool(selected_interests or selected_location or selected_country)
+    use_personalized = personalized or has_explicit_filters
+
+    if use_personalized and not has_explicit_filters:
+        username = get_current_user()
+        if username:
+            saved = get_user_news_preferences(username) or {}
+            selected_interests = (
+                (saved.get("news_interests") or "").strip()
+                or (saved.get("legacy_interests") or "").strip()
+            )
+            selected_country = (saved.get("news_country") or "").strip()
+            selected_location = (saved.get("location") or "").strip()
+        has_explicit_filters = bool(selected_interests or selected_location or selected_country)
+
+    normalized_country = _normalize_news_country(selected_country, selected_location)
+    if not normalized_country and selected_interests:
+        normalized_country = _normalize_news_country(selected_interests)
+    country_query_text = _resolve_country_query_text(selected_country, normalized_country)
+    country_supported = bool(normalized_country and normalized_country in NEWSAPI_TOP_HEADLINES_COUNTRIES)
+
+    if use_personalized and not (selected_interests or country_query_text or selected_location):
+        return (
+            "I can personalize your news. Tell me at least one interest or country, "
+            "or ask me to save your news preferences first."
+        )
 
     diagnostics = []
+    detail_items = []
+
+    def _fmt_article(index: int, title: str, source: str, published: str, summary: str, link: str) -> str:
+        lines = [f"{index}. {title}"]
+        meta = []
+        if source:
+            meta.append(f"Source: {source}")
+        if published:
+            meta.append(f"Published: {published}")
+        if meta:
+            lines.append(" | ".join(meta))
+        if summary:
+            lines.append(f"Summary: {summary}")
+        if link:
+            lines.append(f"Link: {link}")
+        return "\n".join(lines)
+
+    def _normalize_time(raw_time: str | None) -> str:
+        if not raw_time:
+            return ""
+        try:
+            return raw_time.replace("T", " ").replace("Z", " UTC")
+        except Exception:
+            return raw_time
+
+    if not use_personalized:
+        world_query = urllib.parse.quote_plus("world OR global")
+        url = (
+            "https://newsapi.org/v2/everything"
+            f"?q={world_query}&language=en&sortBy=publishedAt&pageSize=20&apiKey={api_key}"
+        )
+        rss_query_text = "world headlines"
+    else:
+        interest_list = [i.strip().lower() for i in selected_interests.split(',') if i.strip()]
+        valid_categories = ['business', 'entertainment', 'health', 'science', 'sports', 'technology']
+        primary_interest = interest_list[0] if interest_list else ""
+        category = primary_interest if primary_interest in valid_categories else None
+
+        if category and country_supported:
+            url = f"https://newsapi.org/v2/top-headlines?country={normalized_country}&category={category}&pageSize=20&apiKey={api_key}"
+        elif category and country_query_text:
+            query = urllib.parse.quote_plus(f"{category} {country_query_text} {selected_location}".strip() or category)
+            url = f"https://newsapi.org/v2/everything?q={query}&sortBy=publishedAt&language=en&pageSize=20&apiKey={api_key}"
+        elif category:
+            query = urllib.parse.quote_plus(f"{category} {selected_location}".strip() or category)
+            url = f"https://newsapi.org/v2/everything?q={query}&sortBy=publishedAt&language=en&pageSize=20&apiKey={api_key}"
+        elif country_supported and not primary_interest:
+            url = f"https://newsapi.org/v2/top-headlines?country={normalized_country}&pageSize=20&apiKey={api_key}"
+        elif country_query_text and not primary_interest:
+            query = urllib.parse.quote_plus(country_query_text)
+            url = f"https://newsapi.org/v2/everything?q={query}&sortBy=publishedAt&language=en&pageSize=20&apiKey={api_key}"
+        else:
+            query_text = " ".join([p for p in [primary_interest, country_query_text, selected_location] if p]) or "world"
+            query = urllib.parse.quote_plus(query_text)
+            url = f"https://newsapi.org/v2/everything?q={query}&sortBy=publishedAt&language=en&pageSize=20&apiKey={api_key}"
+
+        rss_query_text = " ".join([p for p in [selected_interests, country_query_text, selected_location] if p]).strip() or "world"
 
     # Primary source: NewsAPI
     try:
         response = httpx.get(url, timeout=10.0)
         data = response.json()
         if data.get("status") == "ok" and data.get("articles"):
-            headlines = [a["title"] for a in data["articles"][:5]]
-            return "Top headlines:\n" + "\n".join(f"- {h}" for h in headlines)
+            for idx, article in enumerate(data["articles"][:5], start=1):
+                title = (article.get("title") or "").strip()
+                if not title:
+                    continue
+                source = ((article.get("source") or {}).get("name") or "").strip()
+                published = _normalize_time(article.get("publishedAt"))
+                summary = (article.get("description") or article.get("content") or "").strip()
+                link = (article.get("url") or "").strip()
+                detail_items.append(_fmt_article(idx, title, source, published, summary, link))
+
+            if detail_items:
+                return "Top news with details:\n\n" + "\n\n".join(detail_items)
         diagnostics.append(f"newsapi:{data.get('code', 'no_data')}")
     except Exception as e:
         diagnostics.append(f"newsapi_error:{e}")
 
     # Fallback source: Google News RSS (no key required)
-    query_text = " ".join([p for p in [primary_interest, location] if p]) or "world"
-    rss_query = urllib.parse.quote_plus(query_text)
+    rss_query = urllib.parse.quote_plus(rss_query_text)
     rss_url = f"https://news.google.com/rss/search?q={rss_query}&hl=en-US&gl=US&ceid=US:en"
 
     try:
         rss_response = httpx.get(rss_url, timeout=10.0, follow_redirects=True)
         if rss_response.status_code == 200 and rss_response.text:
             root = ET.fromstring(rss_response.text)
-            headlines = []
+            details = []
             for item in root.iter():
                 if not item.tag.endswith("item"):
                     continue
+                title = ""
+                link = ""
+                published = ""
                 for child in item:
                     if child.tag.endswith("title") and child.text:
                         title = child.text.strip()
-                        if title:
-                            headlines.append(title)
-                        break
-                if len(headlines) >= 5:
+                    elif child.tag.endswith("link") and child.text:
+                        link = child.text.strip()
+                    elif child.tag.endswith("pubDate") and child.text:
+                        published = child.text.strip()
+
+                if title:
+                    details.append(_fmt_article(len(details) + 1, title, "Google News RSS", published, "", link))
+                if len(details) >= 5:
                     break
 
-            if headlines:
-                return "Top headlines:\n" + "\n".join(f"- {h}" for h in headlines)
+            if details:
+                return "Top news with details:\n\n" + "\n\n".join(details)
 
         diagnostics.append(f"rss_http:{rss_response.status_code}")
     except Exception as e:
@@ -519,6 +695,7 @@ tools = [
     delete_calendar_event,
     update_calendar_event,
     get_weather,
+    set_news_preferences,
     get_news,
     get_emails,
     send_email,

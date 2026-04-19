@@ -31,6 +31,8 @@ def init_db():
             full_name TEXT NOT NULL,
             location TEXT NOT NULL DEFAULT '',
             interests TEXT,
+            news_interests TEXT,
+            news_country TEXT,
             google_id TEXT UNIQUE,
             google_access_token TEXT,
             google_refresh_token TEXT,
@@ -62,6 +64,8 @@ def init_db():
                 full_name TEXT NOT NULL DEFAULT '',
                 location TEXT NOT NULL DEFAULT '',
                 interests TEXT,
+                news_interests TEXT,
+                news_country TEXT,
                 google_id TEXT,
                 google_access_token TEXT,
                 google_refresh_token TEXT,
@@ -75,7 +79,7 @@ def init_db():
         """)
         shared_cols = [c for c in [
             'id','username','email','password_hash','full_name','location',
-            'interests','created_at','google_id','google_access_token',
+            'interests','news_interests','news_country','created_at','google_id','google_access_token',
             'google_refresh_token','google_token_uri','google_client_id',
             'google_client_secret','google_scopes','google_token_expiry'
         ] if c in existing_user_cols]
@@ -96,6 +100,8 @@ def init_db():
         "google_client_secret": "TEXT",
         "google_scopes":        "TEXT",
         "google_token_expiry":  "TEXT",
+        "news_interests":       "TEXT",
+        "news_country":         "TEXT",
     }
     for col, col_type in google_cols.items():
         if col not in existing_cols:
@@ -348,7 +354,12 @@ def get_user_by_google_id(google_id: str) -> dict | None:
     try:
         conn = get_db()
         row = conn.execute(
-            "SELECT id, username, email, full_name, location, interests FROM users WHERE google_id = ?",
+            """
+            SELECT id, username, email, full_name, location, interests,
+                   news_interests, news_country
+            FROM users
+            WHERE google_id = ?
+            """,
             (google_id,),
         ).fetchone()
         return dict(row) if row else None
@@ -400,7 +411,8 @@ def verify_user(username: str, password: str):
         password_hash = hash_password(password)
         
         cursor.execute("""
-            SELECT id, username, email, full_name, location, interests
+            SELECT id, username, email, full_name, location, interests,
+                   news_interests, news_country
             FROM users
             WHERE username = ? AND password_hash = ?
         """, (username, password_hash))
@@ -422,7 +434,8 @@ def get_user_by_username(username: str):
         cursor = conn.cursor()
         
         cursor.execute("""
-            SELECT id, username, email, full_name, location, interests, google_id
+            SELECT id, username, email, full_name, location, interests,
+                   news_interests, news_country, google_id
             FROM users
             WHERE username = ?
         """, (username,))
@@ -497,6 +510,79 @@ def update_user_preferences(username: str, location: str = None, interests: str 
         
         conn.commit()
     except Exception as e:
+        if conn:
+            conn.rollback()
+        raise
+    finally:
+        if conn:
+            conn.close()
+
+
+def get_user_news_preferences(username: str) -> dict | None:
+    """Return saved news preferences plus legacy fallbacks for a user."""
+    conn = None
+    try:
+        conn = get_db()
+        row = conn.execute(
+            """
+            SELECT username, news_interests, news_country, interests, location
+            FROM users
+            WHERE username = ?
+            """,
+            (username,),
+        ).fetchone()
+        if not row:
+            return None
+
+        return {
+            "username": row["username"],
+            "news_interests": (row["news_interests"] or "").strip(),
+            "news_country": (row["news_country"] or "").strip(),
+            "legacy_interests": (row["interests"] or "").strip(),
+            "location": (row["location"] or "").strip(),
+        }
+    finally:
+        if conn:
+            conn.close()
+
+
+def update_user_news_preferences(
+    username: str,
+    news_interests: str | None = None,
+    news_country: str | None = None,
+) -> bool:
+    """Update saved news preference fields for a user.
+
+    Pass None to leave a field unchanged.
+    Pass an empty string to clear a field.
+    """
+    if news_interests is None and news_country is None:
+        return False
+
+    conn = None
+    try:
+        conn = get_db()
+        fields = []
+        values = []
+
+        if news_interests is not None:
+            clean_interests = news_interests.strip()
+            fields.append("news_interests = ?")
+            values.append(clean_interests or None)
+
+        if news_country is not None:
+            clean_country = news_country.strip().lower()
+            fields.append("news_country = ?")
+            values.append(clean_country or None)
+
+        values.append(username)
+        cursor = conn.execute(
+            f"UPDATE users SET {', '.join(fields)} WHERE username = ?",
+            values,
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception:
         if conn:
             conn.rollback()
         raise

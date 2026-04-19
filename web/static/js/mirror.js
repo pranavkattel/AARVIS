@@ -854,17 +854,17 @@ function updateNews(articles) {
         setTimeout(() => {
             const nums = ['01.','02.','03.','04.','05.'];
             if (articles && articles.length > 0) {
-                const items = articles.slice(0, 4).map((article, i) => {
+                const items = articles.slice(0, 5).map((article, i) => {
                     const title = article.title.length > 160
                         ? article.title.substring(0, 157) + '…'
                         : article.title;
                     return `<li><span class="sm-news-num">${nums[i]}</span>${title}</li>`;
                 }).join('');
                 newsWidget.innerHTML =
-                    `<div class="sm-section-label">Latest News</div><ul class="sm-news-list">${items}</ul>`;
+                    `<div class="sm-section-label">World Headlines</div><ul class="sm-news-list">${items}</ul>`;
             } else {
                 newsWidget.innerHTML =
-                    '<div class="sm-section-label">Latest News</div><ul class="sm-news-list"><li>No news available</li></ul>';
+                    '<div class="sm-section-label">World Headlines</div><ul class="sm-news-list"><li>No news available</li></ul>';
             }
             setTimeout(() => { newsWidget.style.opacity = '1'; }, 50);
         }, 300);
@@ -882,7 +882,7 @@ function fetchWeather() {
 
 function fetchNews() {
     console.log('[DEBUG] Fetching news from API...');
-    fetch('/api/news', {
+    fetch('/api/news?mode=world', {
         credentials: 'include'
     })
         .then(response => {
@@ -897,7 +897,7 @@ function fetchNews() {
             console.error('[DEBUG] Error fetching news:', error);
             const newsWidget = document.getElementById('newsWidget');
             if (newsWidget) {
-                newsWidget.innerHTML = '<div class="news-header">Latest News</div><div class="news-item"><div class="news-title">Unable to load news</div></div>';
+                newsWidget.innerHTML = '<div class="news-header">World Headlines</div><div class="news-item"><div class="news-title">Unable to load news</div></div>';
             }
         });
 }
@@ -1223,7 +1223,7 @@ function hidePersonalizedContent() {
         document.getElementById('weatherTemp').textContent = '--°C';
     }
     if (newsWidget) {
-        newsWidget.innerHTML = '<div class="news-header">Latest News</div><div class="news-item"><div class="news-title">Loading news...</div></div>';
+        newsWidget.innerHTML = '<div class="news-header">World Headlines</div><div class="news-item"><div class="news-title">Loading news...</div></div>';
     }
 }
 

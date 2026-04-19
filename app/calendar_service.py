@@ -5,6 +5,7 @@ from googleapiclient.discovery import build
 from pathlib import Path
 import pickle
 from datetime import datetime, timedelta
+from typing import Any
 from app.services.google_oauth import credentials_from_db, GoogleReauthRequiredError
 
 # Scopes define the level of access
@@ -122,6 +123,30 @@ def get_upcoming_events(max_results=10, raise_on_auth_error: bool = False):
         print(f"Error fetching calendar events: {e}")
         return []
 
+
+def get_events_in_range(start_time, end_time, max_results=50, raise_on_auth_error: bool = False):
+    """Get events within an arbitrary datetime range."""
+    try:
+        service = authenticate_google_calendar()
+        events_result = service.events().list(
+            calendarId='primary',
+            timeMin=start_time.isoformat(),
+            timeMax=end_time.isoformat(),
+            maxResults=max_results,
+            singleEvents=True,
+            orderBy='startTime'
+        ).execute()
+        return events_result.get('items', [])
+    except GoogleReauthRequiredError as e:
+        if raise_on_auth_error:
+            raise
+        print(f"[Calendar] Re-authentication required: {e}")
+        return []
+    except Exception as e:
+        print(f"Error fetching calendar events in range: {e}")
+        return []
+
+
 def get_todays_events(raise_on_auth_error: bool = False):
     """Get today's events from Google Calendar."""
     try:
@@ -163,7 +188,23 @@ def get_todays_events(raise_on_auth_error: bool = False):
         print(f"Error fetching today's events: {e}")
         return []
 
-def add_event(summary, start_time, end_time, description='', location=''):
+
+def get_calendar_event(event_id: str, raise_on_auth_error: bool = False) -> dict[str, Any] | None:
+    """Fetch a single calendar event by ID."""
+    try:
+        service = authenticate_google_calendar()
+        return service.events().get(calendarId='primary', eventId=event_id).execute()
+    except GoogleReauthRequiredError as e:
+        if raise_on_auth_error:
+            raise
+        print(f"[Calendar] Re-authentication required: {e}")
+        return None
+    except Exception as e:
+        print(f"Error fetching calendar event: {e}")
+        return None
+
+
+def create_calendar_event(summary, start_time, end_time, description='', location='', timezone_name='Asia/Kathmandu'):
     """
     Add a new event to Google Calendar.
     
@@ -190,7 +231,7 @@ def add_event(summary, start_time, end_time, description='', location=''):
             },
             'end': {
                 'dateTime': end_time.isoformat(),
-                'timeZone': 'Asia/Kathmandu',
+                'timeZone': timezone_name,
             },
         }
         
@@ -198,9 +239,71 @@ def add_event(summary, start_time, end_time, description='', location=''):
         print(f"Event created: {created_event.get('htmlLink')}")
         return created_event
         
+    except GoogleReauthRequiredError:
+        raise
     except Exception as e:
         print(f"Error creating event: {e}")
         return None
+
+
+def update_calendar_event(event_id, summary=None, start_time=None, end_time=None, description=None, location=None, timezone_name='Asia/Kathmandu'):
+    """Update an existing Google Calendar event."""
+    try:
+        service = authenticate_google_calendar()
+        event = service.events().get(calendarId='primary', eventId=event_id).execute()
+
+        if summary is not None:
+            event['summary'] = summary
+        if description is not None:
+            event['description'] = description
+        if location is not None:
+            event['location'] = location
+        if start_time is not None:
+            event['start'] = {
+                'dateTime': start_time.isoformat(),
+                'timeZone': timezone_name,
+            }
+        if end_time is not None:
+            event['end'] = {
+                'dateTime': end_time.isoformat(),
+                'timeZone': timezone_name,
+            }
+
+        updated_event = service.events().update(
+            calendarId='primary',
+            eventId=event_id,
+            body=event,
+        ).execute()
+        print(f"Event updated: {updated_event.get('htmlLink')}")
+        return updated_event
+    except GoogleReauthRequiredError:
+        raise
+    except Exception as e:
+        print(f"Error updating event: {e}")
+        return None
+
+
+def delete_calendar_event(event_id, raise_on_auth_error: bool = False) -> bool:
+    """Delete a Google Calendar event by ID."""
+    try:
+        service = authenticate_google_calendar()
+        service.events().delete(calendarId='primary', eventId=event_id).execute()
+        print(f"Event deleted: {event_id}")
+        return True
+    except GoogleReauthRequiredError as e:
+        if raise_on_auth_error:
+            raise
+        print(f"[Calendar] Re-authentication required: {e}")
+        return False
+    except Exception as e:
+        print(f"Error deleting event: {e}")
+        return False
+
+
+def add_event(summary, start_time, end_time, description='', location=''):
+    """Backward-compatible wrapper for event creation."""
+    return create_calendar_event(summary, start_time, end_time, description, location)
+
 
 def add_event_simple(title, date_str, time_str, duration_minutes=60, description=''):
     """
@@ -222,7 +325,7 @@ def add_event_simple(title, date_str, time_str, duration_minutes=60, description
         start_time = datetime.strptime(date_time_str, '%Y-%m-%d %H:%M')
         end_time = start_time + timedelta(minutes=duration_minutes)
         
-        return add_event(title, start_time, end_time, description)
+        return create_calendar_event(title, start_time, end_time, description)
         
     except Exception as e:
         print(f"Error creating event: {e}")

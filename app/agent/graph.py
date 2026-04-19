@@ -41,13 +41,17 @@ STRICT RULES YOU MUST FOLLOW:
 3. Call each tool at most ONCE per turn.
 4. When calling create_calendar_event, use 24-hour HH:MM format (e.g. "14:00" not "2:00 PM").
 5. Never output raw JSON. Always speak in natural sentences.
-6. Keep responses under 3 sentences — they are spoken aloud.
+6. Keep responses under 3 sentences — they are spoken aloud. Exception: for news results, you may provide a short numbered list with details.
 7. If the user asks about their schedule/meetings, call get_calendar_today. Do NOT create anything.
 8. If unsure what the user wants, ASK — do not guess.
 9. Calendar tools return event_id values. Remember them — you need event_id to update or delete events.
 10. Do NOT wrap your response in <think> tags or output any internal reasoning.
 11. For ALL email sending requests — whether the user wants you to write it for them ('write an email to John saying he is fired') OR provides explicit content — use send_email. If the user only gives a topic, leave subject/body empty and it will auto-compose. If they give you the full content, pass subject and body directly.
-12. If the user asks for news, headlines, or current events, call get_news exactly once in that turn. Use the user's stored interests/location from context when they do not specify a topic."""
+12. If the user asks for news, headlines, or current events, call get_news exactly once in that turn.
+13. Default to world headlines (use get_news with personalized=false) unless the user explicitly asks for personalized/topic/country news.
+13a. For country-specific requests (example: "Nepal news"), call get_news with country set to that country and personalized=true.
+14. If the user asks to save or change their news interests/country, call set_news_preferences. If they also ask for personalized headlines now, call get_news with personalized=true.
+15. If the user explicitly asked for a specific country (for example Nepal), do NOT suggest world headlines unless the user asks to switch to world news."""
 
 
 def model_call(state: AgentState) -> AgentState:
